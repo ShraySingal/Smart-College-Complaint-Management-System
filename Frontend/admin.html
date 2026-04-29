@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard | College Smart System</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header class="navbar">
+        <div class="nav-container">
+            <div class="brand">
+                <i class="fa-solid fa-graduation-cap"></i>
+                <div class="brand-text">
+                    <h1>Admin Panel</h1>
+                    <span>College Smart System</span>
+                </div>
+            </div>
+            <div class="user-controls">
+                <span id="welcomeText" class="welcome-text"></span>
+                <button id="themeToggle" class="btn btn-outline" style="margin-right: 0.5rem;"><i class="fa-solid fa-moon"></i></button>
+                <button id="deleteAccountBtn" class="btn btn-outline" style="margin-right: 0.5rem; color: #ef4444; border-color: #ef4444;" onclick="deleteAccount()" title="Delete Account"><i class="fa-solid fa-trash-can"></i></button>
+                <button id="logoutBtn" class="btn btn-outline"><i class="fa-solid fa-sign-out-alt"></i> Logout</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="app-container">
+        <!-- Sidebar Tabs -->
+        <aside class="sidebar glass-panel">
+            <button class="nav-btn active" onclick="switchTab('complaints')"><i class="fa-solid fa-clipboard-list"></i> Complaints</button>
+            <button class="nav-btn" onclick="switchTab('users')"><i class="fa-solid fa-users"></i> User Management</button>
+            <button class="nav-btn" onclick="switchTab('analytics')"><i class="fa-solid fa-chart-line"></i> Analytics</button>
+            <button class="nav-btn" onclick="switchTab('logs')"><i class="fa-solid fa-file-contract"></i> System Logs</button>
+        </aside>
+
+        <!-- Main Content -->
+        <section class="main-content">
+            <!-- TAB: COMPLAINTS -->
+            <div id="complaintsTab" class="tab-content active">
+                <div class="dashboard-header">
+                    <h2>Manage Complaints</h2>
+                    <div id="totalComplaintsCount" class="badge badge-primary">0 Total</div>
+                </div>
+                
+                <div class="dashboard-content glass-panel">
+                    <div class="filter-bar">
+                        <input type="text" id="searchInput" placeholder="Search title/desc..." class="form-control">
+                        <select id="statusFilter" class="form-control">
+                            <option value="">All Status</option>
+                            <option value="Pending">Pending</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Resolved">Resolved</option>
+                        </select>
+                        <select id="categoryFilter" class="form-control">
+                            <option value="">All Categories</option>
+                            <option value="Electricity">Electricity</option>
+                            <option value="Water">Water</option>
+                            <option value="Internet">Internet</option>
+                            <option value="Furniture">Furniture</option>
+                            <option value="Hygiene">Hygiene</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="applyFilters()">Filter</button>
+                        <button class="btn btn-outline" onclick="exportToCSV()"><i class="fa-solid fa-file-csv"></i> Export</button>
+                        <button id="bulkResolveBtn" class="btn btn-success" style="display:none;" onclick="openBulkResolveModal()">Bulk Resolve</button>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th><input type="checkbox" id="selectAll"></th>
+                                    <th>Reporter</th>
+                                    <th>Title</th>
+                                    <th>Category</th>
+                                    <th>Priority</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminComplaintsList"></tbody>
+                        </table>
+                    </div>
+                    <div class="pagination" id="paginationControls">
+                        <button class="btn btn-outline btn-sm" id="prevPage" onclick="changePage(-1)">Previous</button>
+                        <span id="pageInfo">Page 1 of 1</span>
+                        <button class="btn btn-outline btn-sm" id="nextPage" onclick="changePage(1)">Next</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: USERS -->
+            <div id="usersTab" class="tab-content">
+                <h2>User Management</h2>
+                <div class="dashboard-content glass-panel">
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Role</th>
+                                    <th>Department</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminUsersList"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: ANALYTICS -->
+            <div id="analyticsTab" class="tab-content">
+                <h2>Real-time Analytics</h2>
+                <div class="stats-grid">
+                    <div class="glass-panel stat-box">
+                        <h4 id="totalStats">0</h4>
+                        <p>Total Complaints</p>
+                    </div>
+                    <div class="glass-panel stat-box">
+                        <h4 id="pendingStats" style="color: var(--warning);">0</h4>
+                        <p>Pending</p>
+                    </div>
+                    <div class="glass-panel stat-box">
+                        <h4 id="resolvedStats" style="color: var(--success);">0</h4>
+                        <p>Resolved</p>
+                    </div>
+                    <div class="glass-panel stat-box">
+                        <h4 id="overdueStats" style="color: var(--danger);">0</h4>
+                        <p>Overdue</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: LOGS -->
+            <div id="logsTab" class="tab-content">
+                <h2>System Logs</h2>
+                <div class="glass-panel log-container" id="systemLogs" style="height: 500px; overflow-y: auto; padding: 1rem; font-family: monospace; font-size: 0.8rem; color: #4ade80; background: #000;">
+                    Loading system logs...
+                </div>
+                <button class="btn btn-outline mt-1" onclick="fetchLogs()"><i class="fa-solid fa-sync"></i> Refresh Logs</button>
+            </div>
+        </section>
+    </main>
+
+    <!-- MODALS -->
+    <div id="viewComplaintModal" class="modal-overlay">
+        <div class="modal-content glass-panel" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3 id="viewCompTitle">Complaint Details</h3>
+                <button class="close-modal"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <!-- Content handled by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- RESOLVE MODAL -->
+    <div id="resolveModal" class="modal-overlay">
+        <div class="modal-content glass-panel" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Resolve Complaint</h3>
+                <button class="close-modal"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="resolveForm">
+                    <input type="hidden" id="resolveComplaintId">
+                    <div class="input-group" style="margin-bottom: 1rem;">
+                        <label>Resolution Summary</label>
+                        <textarea id="resSummary" rows="3" required placeholder="What was done to solve this?" class="form-control"></textarea>
+                    </div>
+                    <div class="input-group" style="margin-bottom: 1.5rem;">
+                        <label><i class="fa-solid fa-camera"></i> Proof of Resolution (Image/Video)</label>
+                        <input type="file" id="resAttachment" accept="image/*,video/*" class="form-control">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Submit Resolution</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settingsModal" class="modal-overlay">
+        <div class="modal-content glass-panel" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Account Settings</h3>
+                <button class="close-modal"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="changePasswordForm">
+                    <div class="form-group">
+                        <label>Current Password</label>
+                        <input type="password" id="currentPassword" required class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>New Password</label>
+                        <input type="password" id="newPassword" required class="form-control">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Update Password</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settingsModal" class="modal-overlay">
+        <div class="modal-content glass-panel" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Account Settings</h3>
+                <button class="close-modal"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="changePasswordForm">
+                    <div style="margin-bottom: 1rem;">
+                        <label>Current Password</label>
+                        <input type="password" id="currentPassword" required class="form-control">
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <label>New Password</label>
+                        <input type="password" id="newPassword" required class="form-control">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Update Password</button>
+                    <hr style="border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0;">
+                    <button type="button" class="btn btn-danger w-100" onclick="deleteAccount()" style="background: #ef4444; color: white; border: none; padding: 0.8rem; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                        <i class="fa-solid fa-trash-can"></i> Delete My Account
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">
+        <i class="fa-solid fa-check-circle"></i>
+        <span id="toastMsg">Success</span>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

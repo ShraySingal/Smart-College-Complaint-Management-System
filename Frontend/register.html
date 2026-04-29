@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register | NovaTech Smart Complaint System</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- Header Navigation (Same as Login) -->
+    <header class="navbar">
+        <div class="nav-container">
+            <div class="brand">
+                <i class="fa-solid fa-graduation-cap"></i>
+                <div class="brand-text">
+                    <h1>NovaTech</h1>
+                    <span>Complaint System</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="app-container">
+        <!-- REGISTER VIEW (Matches Login Wrapper) -->
+        <section class="view active">
+            <div class="login-wrapper">
+                <div class="login-card glass-panel" style="max-width: 550px;">
+                    <div class="login-header">
+                        <h2>Create Account</h2>
+                        <p>Join the NovaTech smart complaint network.</p>
+                    </div>
+                    
+                    <form id="registerForm" class="login-form">
+                        <div class="input-group">
+                            <i class="fa-solid fa-user icon"></i>
+                            <input type="text" id="name" placeholder="Full Name" required>
+                        </div>
+                        
+                        <div class="input-group">
+                            <i class="fa-solid fa-envelope icon"></i>
+                            <input type="email" id="email" placeholder="Email Address" required>
+                        </div>
+
+                        <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                            <div class="input-group" style="flex: 1; margin-bottom: 0;">
+                                <i class="fa-solid fa-lock icon"></i>
+                                <input type="password" id="password" placeholder="Password" required minlength="6">
+                            </div>
+                            <div class="input-group" style="flex: 1; margin-bottom: 0;">
+                                <i class="fa-solid fa-user-tag icon" style="left: 1rem;"></i>
+                                <select id="role" required onchange="toggleRoleFields()" style="padding-left: 2.8rem; height: 100%; width: 100%; border: none; background: transparent; color: var(--text); font-family: inherit;">
+                                    <option value="student">Student</option>
+                                    <option value="faculty">Teacher/Staff</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <i class="fa-solid fa-building-columns icon"></i>
+                            <select id="department" required style="padding-left: 2.8rem; height: 100%; width: 100%; border: none; background: transparent; color: var(--text); font-family: inherit;">
+                                <option value="">Select Department</option>
+                                <option value="Computer Science">Computer Science</option>
+                                <option value="Electronics">Electronics</option>
+                                <option value="Mechanical">Mechanical</option>
+                                <option value="Management">Management</option>
+                                <option value="Basic Sciences">Basic Sciences</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group">
+                            <i class="fa-solid fa-phone icon"></i>
+                            <input type="tel" id="phone" placeholder="Phone Number (+91...)" required>
+                        </div>
+
+                        <!-- Dynamic Student Fields -->
+                        <div id="studentFields" style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+                            <div class="input-group" style="flex: 1; margin-bottom: 0;">
+                                <i class="fa-solid fa-calendar-days icon" style="left: 1rem;"></i>
+                                <select id="academicYear" style="padding-left: 2.8rem; height: 100%; width: 100%; border: none; background: transparent; color: var(--text); font-family: inherit;">
+                                    <option value="1st Year">1st Year</option>
+                                    <option value="2nd Year">2nd Year</option>
+                                    <option value="3rd Year">3rd Year</option>
+                                    <option value="4th Year">4th Year</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="registerError" class="error-msg"></div>
+
+                        <button type="submit" class="btn btn-primary btn-block">
+                            Register Now <i class="fa-solid fa-user-plus"></i>
+                        </button>
+                    </form>
+                    
+                    <div class="login-footer">
+                        <p>Already have an account? <a href="login.html">Sign In here</a></p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        function toggleRoleFields() {
+            const role = document.getElementById('role').value;
+            const studentFields = document.getElementById('studentFields');
+            if (role === 'student') {
+                studentFields.style.display = 'flex';
+            } else {
+                studentFields.style.display = 'none';
+            }
+        }
+    </script>
+    <script src="js/auth.js"></script>
+</body>
+</html>

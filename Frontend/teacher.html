@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faculty Dashboard | NovaTech</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- Header Navigation -->
+    <header class="navbar">
+        <div class="nav-container">
+            <div class="brand">
+                <i class="fa-solid fa-graduation-cap"></i>
+                <div class="brand-text">
+                    <h1>NovaTech</h1>
+                    <span>Complaint System</span>
+                </div>
+            </div>
+            <div class="user-controls">
+                <span id="welcomeText" class="welcome-text"></span>
+                <button id="themeToggle" class="btn btn-outline" style="margin-right: 0.5rem;"><i class="fa-solid fa-moon"></i></button>
+                <button id="deleteAccountBtn" class="btn btn-outline" style="margin-right: 0.5rem; color: #ef4444; border-color: #ef4444;" onclick="deleteAccount()" title="Delete Account"><i class="fa-solid fa-trash-can"></i></button>
+                <button id="logoutBtn" class="btn btn-outline"><i class="fa-solid fa-sign-out-alt"></i> Logout</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="app-container">
+        <!-- USER DASHBOARD -->
+        <section class="view active">
+            <!-- User Profile Card -->
+            <div class="profile-card" id="profileCard">
+                <div class="avatar-container" style="position: relative; cursor: pointer;" onclick="document.getElementById('profilePhotoInput').click()">
+                    <img src="https://via.placeholder.com/100" alt="Profile" class="profile-avatar" id="profileImg">
+                    <div class="avatar-overlay" style="position: absolute; bottom: 0; right: 0; background: var(--primary); color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">
+                        <i class="fa-solid fa-camera"></i>
+                    </div>
+                </div>
+                <input type="file" id="profilePhotoInput" style="display: none;" accept="image/*" onchange="uploadProfilePhoto(this)">
+                <div class="profile-info">
+                    <h3 id="profileName">Loading Name...</h3>
+                    <p id="profileEmail"><i class="fa-solid fa-envelope"></i> loading@email.com</p>
+                    <div class="profile-badges">
+                        <span class="profile-badge" id="profileRole"><i class="fa-solid fa-user-tag"></i> Role</span>
+                        <span class="profile-badge" id="profileDept"><i class="fa-solid fa-book"></i> Department</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-header">
+                <h2>Faculty Dashboard</h2>
+                <div>
+                    <button id="openComplaintModalBtn" class="btn btn-outline" style="margin-right: 0.5rem;"><i class="fa-solid fa-plus"></i> New Complaint</button>
+                    <button class="btn btn-primary" onclick="switchTab('assigned')"><i class="fa-solid fa-list-check"></i> My Assigned Tasks</button>
+                </div>
+            </div>
+
+            <div id="assignedTasksSection" class="dashboard-content glass-panel" style="margin-bottom: 2rem; display: none;">
+                <div class="dashboard-header">
+                    <h3><i class="fa-solid fa-tools"></i> Assigned to Me</h3>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Title</th>
+                                <th>Category</th>
+                                <th>Status</th>
+                                <th>Deadline</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="assignedTasksList">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="dashboard-content glass-panel">
+                <div class="filter-bar" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; align-items: center;">
+                    <input type="text" id="searchInput" placeholder="Search my complaints..." class="form-control" style="max-width: 250px; background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid var(--border);">
+                    <select id="statusFilter" class="form-control" style="max-width: 150px; background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid var(--border);">
+                        <option value="">All Status</option>
+                        <option value="Pending">Pending</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Resolved">Resolved</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="applyFilters()">Filter</button>
+                    <button class="btn btn-outline" onclick="exportToCSV()" style="margin-left: 0.5rem;"><i class="fa-solid fa-file-csv"></i> Export</button>
+                </div>
+                <div class="table-container">
+                    <h3>My Complaints</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Category</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="userComplaintsList">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- NEW COMPLAINT MODAL -->
+    <div id="complaintModal" class="modal-overlay">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3>Raise a Complaint</h3>
+                <button class="close-modal"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="complaintForm" class="horizontal-form">
+                    <div class="horizontal-group">
+                        <label>Title</label>
+                        <input type="text" id="compTitle" required placeholder="Brief description of the issue">
+                    </div>
+                    <div class="horizontal-group">
+                        <label>Category</label>
+                        <div style="display: flex; gap: 0.5rem; flex: 1;">
+                            <select id="compCategory" required style="flex: 1;">
+                                <option value="">Select Category</option>
+                                <option value="Electricity">Electricity</option>
+                                <option value="Water">Water</option>
+                                <option value="Internet">Internet</option>
+                                <option value="Furniture">Furniture</option>
+                                <option value="Hygiene">Hygiene</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="horizontal-group">
+                        <label>Description</label>
+                        <textarea id="compDesc" rows="3" required placeholder="Detailed explanation..."></textarea>
+                    </div>
+                    <div class="horizontal-group">
+                        <label><i class="fa-solid fa-location-dot"></i> Problem Occurred In</label>
+                        <select id="compLocation" required>
+                            <option value="">Select Location</option>
+                            <option value="Hostel">Hostel</option>
+                            <option value="Academic Block">Academic Block</option>
+                        </select>
+                    </div>
+                    <div class="horizontal-group">
+                        <label><i class="fa-solid fa-door-open"></i> Room / Location</label>
+                        <input type="text" id="compRoom" required placeholder="e.g. Block B, Room 302">
+                    </div>
+                    
+                    <div class="input-group">
+                        <label><i class="fa-solid fa-paperclip"></i> Attach Image/Video <span style="color:#ef4444;">(Required)</span></label>
+                        
+                        <div class="media-source-toggle">
+                            <button type="button" class="source-btn active" id="sourceUpload">
+                                <i class="fa-solid fa-file-arrow-up"></i> From Device
+                            </button>
+                            <button type="button" class="source-btn" id="sourceCapture">
+                                <i class="fa-solid fa-camera"></i> Real-time Capture
+                            </button>
+                        </div>
+
+                        <div id="uploadSection">
+                            <input type="file" id="compAttachment" accept="image/*,video/*" class="file-input">
+                        </div>
+
+                        <div id="cameraSection" class="camera-container">
+                            <video id="cameraStream" autoplay playsinline muted></video>
+                            <div class="camera-controls">
+                                <button type="button" id="startCamera" class="btn btn-outline btn-sm">
+                                    <i class="fa-solid fa-power-off"></i> Start Camera
+                                </button>
+                                <button type="button" id="capturePhoto" class="btn btn-primary btn-sm" style="display:none;">
+                                    <i class="fa-solid fa-camera"></i> Take Photo
+                                </button>
+                            </div>
+                            <canvas id="photoCanvas" style="display:none;"></canvas>
+                        </div>
+
+                        <div id="filePreview" class="file-preview"></div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Submit Complaint</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="viewComplaintModal" class="modal-overlay">
+        <div class="modal-content glass-panel" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3 id="viewCompTitle">Complaint Details</h3>
+                <button class="close-modal"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="details-grid">
+                    <div class="detail-item">
+                        <label>Category</label>
+                        <p id="viewCompCategory"></p>
+                    </div>
+                    <div class="detail-item">
+                        <label>Status</label>
+                        <p id="viewCompStatus"></p>
+                    </div>
+                    <div class="detail-item">
+                        <label>Location</label>
+                        <p id="viewCompLocation"></p>
+                    </div>
+                    <div class="detail-item">
+                        <label>Room</label>
+                        <p id="viewCompRoom"></p>
+                    </div>
+                </div>
+                <div class="detail-section">
+                    <label>Description</label>
+                    <p id="viewCompDesc" class="description-box"></p>
+                </div>
+                <div class="detail-section">
+                    <label>Attachment</label>
+                    <div id="viewCompAttachment" class="attachment-preview"></div>
+                </div>
+                <div id="viewResolutionSection" class="detail-section" style="display:none;">
+                    <label>Resolution Summary</label>
+                    <p id="viewCompResolution" class="resolution-box"></p>
+                </div>
+                <div id="viewFeedbackSection" class="detail-section" style="display:none;">
+                    <hr style="border: 0; border-top: 1px solid var(--border); margin: 2rem 0 1rem;">
+                    <label>User Feedback</label>
+                    <div class="feedback-display">
+                        <div class="rating-stars" id="viewCompRating"></div>
+                        <p id="viewCompFeedbackMsg" class="description-box" style="background: rgba(37, 99, 235, 0.03);"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RESOLVE MODAL -->
+    <div id="resolveModal" class="modal-overlay">
+        <div class="modal-content glass-panel" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Resolve Complaint</h3>
+                <button class="close-modal"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="resolveForm">
+                    <input type="hidden" id="resolveComplaintId">
+                    <div class="input-group" style="margin-bottom: 1rem;">
+                        <label>Resolution Summary</label>
+                        <textarea id="resSummary" rows="3" required placeholder="What was done to solve this?" class="form-control"></textarea>
+                    </div>
+                    <div class="input-group" style="margin-bottom: 1.5rem;">
+                        <label><i class="fa-solid fa-camera"></i> Proof of Resolution (Image/Video)</label>
+                        <input type="file" id="resAttachment" accept="image/*,video/*" class="form-control">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Submit Resolution</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- FEEDBACK MODAL -->
+    <div id="feedbackModal" class="modal-overlay">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h3>Provide Feedback</h3>
+                <button class="close-modal"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="feedbackForm">
+                    <input type="hidden" id="feedbackComplaintId">
+                    <div class="input-group">
+                        <label>Rating (1 to 5)</label>
+                        <input type="number" id="feedRating" min="1" max="5" required placeholder="5">
+                    </div>
+                    <div class="input-group">
+                        <label>Comments</label>
+                        <textarea id="feedMessage" rows="3" required placeholder="How was the resolution?"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-block">Submit Feedback</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOTIFICATION TOAST -->
+    <!-- SETTINGS MODAL -->
+    <div id="settingsModal" class="modal-overlay">
+        <div class="modal-content glass-panel" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Account Settings</h3>
+                <button class="close-modal"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="changePasswordForm">
+                    <div style="margin-bottom: 1rem;">
+                        <label>Current Password</label>
+                        <input type="password" id="currentPassword" required class="form-control">
+                    </div>
+                    <div style="margin-bottom: 1rem;">
+                        <label>New Password</label>
+                        <input type="password" id="newPassword" required class="form-control">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Update Password</button>
+                    <hr style="border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0;">
+                    <button type="button" class="btn btn-danger w-100" onclick="deleteAccount()" style="background: #ef4444; color: white; border: none; padding: 0.8rem; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                        <i class="fa-solid fa-trash-can"></i> Delete My Account
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">
+        <i class="fa-solid fa-check-circle"></i>
+        <span id="toastMsg">Success</span>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>
