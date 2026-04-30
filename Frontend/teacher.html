@@ -146,9 +146,14 @@
                             </select>
                         </div>
                     </div>
-                    <div class="horizontal-group">
-                        <label>Description</label>
-                        <textarea id="compDesc" rows="3" required placeholder="Detailed explanation..."></textarea>
+                    <div class="horizontal-group" style="align-items: flex-start;">
+                        <label style="padding-top: 0.5rem;">Description</label>
+                        <div style="flex: 1; display: flex; flex-direction: column; gap: 0.5rem;">
+                            <textarea id="compDesc" rows="3" required placeholder="Detailed explanation..."></textarea>
+                            <button type="button" id="enhanceAIBtn" onclick="enhanceDescriptionWithAI()" class="btn-ai-small" style="width: fit-content;">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> ✨ Enhance with AI
+                            </button>
+                        </div>
                     </div>
                     <div class="horizontal-group">
                         <label><i class="fa-solid fa-location-dot"></i> Problem Occurred In</label>
