@@ -17,7 +17,8 @@ const {
     reopenComplaint,
     getAITag,
     getStats,
-    getAssignedComplaints
+    getAssignedComplaints,
+    enhanceDescription
 } = require('../controllers/complaintController');
 
 // Routes
@@ -32,6 +33,7 @@ router.get('/assigned', authMiddleware, getAssignedComplaints);
 router.get('/all', authMiddleware, adminMiddleware, getAllComplaints);
 router.get('/stats', authMiddleware, adminMiddleware, getStats);
 router.post('/suggest-category', authMiddleware, getAITag);
+router.post('/enhance', authMiddleware, enhanceDescription);
 
 router.put('/:id/resolve', authMiddleware, adminMiddleware, upload.single('attachment'), [
     body('resolutionSummary').notEmpty().withMessage('Resolution summary is required')

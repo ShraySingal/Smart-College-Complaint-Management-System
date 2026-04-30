@@ -307,6 +307,45 @@ const getAssignedComplaints = async (req, res) => {
     }
 };
 
+const enhanceDescription = async (req, res) => {
+    try {
+        const { text } = req.body;
+        if (!text || text.trim() === '') {
+            return res.status(400).json({ message: 'Text is required for enhancement' });
+        }
+        
+        const keywords = {
+            'fan': 'I am writing to formally report an issue regarding a malfunctioning fan in the specified area. The fan is currently not operational, causing discomfort. I request prompt maintenance to resolve this issue as it is affecting the learning environment.',
+            'light': 'I am submitting a complaint regarding a broken or non-functional light fixture. Poor visibility in this area creates an unsafe and unproductive environment. Please arrange for an electrician to replace or repair the lighting as soon as possible.',
+            'water': 'I would like to bring to your attention a plumbing issue. There is a problem with the water supply/leakage in the designated area. This is causing inconvenience and potential water damage. Immediate assistance from the maintenance department is requested.',
+            'wifi': 'I am experiencing significant connectivity issues with the campus Wi-Fi network. The internet connection is either completely down or excessively slow, which is severely hampering academic work and research. Kindly investigate and restore the network stability.',
+            'internet': 'I am experiencing significant connectivity issues with the campus Wi-Fi network. The internet connection is either completely down or excessively slow, which is severely hampering academic work and research. Kindly investigate and restore the network stability.',
+            'clean': 'I am writing to report a hygiene and cleanliness issue. The mentioned area has not been cleaned properly and requires immediate housekeeping attention to maintain a healthy and sanitary environment for everyone.',
+            'dirty': 'I am writing to report a hygiene and cleanliness issue. The mentioned area has not been cleaned properly and requires immediate housekeeping attention to maintain a healthy and sanitary environment for everyone.',
+            'ac': 'This is a formal request for maintenance regarding the air conditioning unit. The AC is failing to cool the room properly or is completely non-functional. Due to the high temperatures, it is vital that this is repaired promptly.'
+        };
+
+        let enhancedText = '';
+        const lowerText = text.toLowerCase();
+        
+        for (const [key, template] of Object.entries(keywords)) {
+            if (lowerText.includes(key)) {
+                enhancedText = template;
+                break;
+            }
+        }
+
+        if (!enhancedText) {
+            enhancedText = `I am submitting this complaint to formally report the following issue: "${text.trim()}". This problem is causing inconvenience and I kindly request the concerned maintenance team to look into this matter and resolve it at the earliest possible convenience.`;
+        }
+
+        res.status(200).json({ enhanced: enhancedText });
+    } catch (error) {
+        logger.error('Enhance AI error:', error);
+        res.status(500).json({ message: 'Error enhancing description' });
+    }
+};
+
 module.exports = { 
     raiseComplaint, 
     getMyComplaints, 
@@ -317,5 +356,6 @@ module.exports = {
     reopenComplaint,
     getAITag,
     getStats,
-    getAssignedComplaints
+    getAssignedComplaints,
+    enhanceDescription
 };

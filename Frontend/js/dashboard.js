@@ -1134,6 +1134,45 @@ async function suggestAITag() {
     }
 }
 
+async function enhanceDescriptionWithAI() {
+    const descInput = document.getElementById('compDesc');
+    const text = descInput.value;
+    const btn = document.getElementById('enhanceBtn');
+
+    if (!text || text.trim() === '') {
+        return showToast('Please type a few words first to enhance!', 'info');
+    }
+
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enhancing...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE}/complaints/enhance`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ text })
+        });
+        const data = await response.json();
+        
+        if (response.ok && data.enhanced) {
+            descInput.value = data.enhanced;
+            showToast('Description magically enhanced! ✨', 'success');
+        } else {
+            showToast(data.message || 'Could not enhance description.', 'error');
+        }
+    } catch (e) {
+        console.error('Enhance AI Error:', e);
+        showToast('Error enhancing description.', 'error');
+    } finally {
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+    }
+}
+
 // 6. Internal Messaging
 let currentChatComplaintId = null;
 

@@ -147,7 +147,12 @@
                         </div>
                     </div>
                     <div class="horizontal-group">
-                        <label>Description</label>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <label style="margin: 0;">Description</label>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="enhanceDescriptionWithAI()" id="enhanceBtn" style="border-color: #8b5cf6; color: #8b5cf6; padding: 0.2rem 0.5rem; font-size: 0.8rem; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> AI Enhance
+                            </button>
+                        </div>
                         <textarea id="compDesc" rows="3" required placeholder="Detailed explanation..."></textarea>
                     </div>
                     <div class="horizontal-group">
