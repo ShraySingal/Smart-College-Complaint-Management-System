@@ -1,6 +1,6 @@
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-// TODO: Replace with your actual Render backend URL after deploying
-const PROD_BACKEND_URL = 'https://your-backend-app-name.onrender.com';
+// Production Render backend URL
+const PROD_BACKEND_URL = 'https://my-smart-college-complaint-management.onrender.com';
 const API_BASE = isLocal ? 'http://localhost:5010/api' : `${PROD_BACKEND_URL}/api`;
 
 let currentUser = null;
