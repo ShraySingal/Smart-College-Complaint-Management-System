@@ -9,25 +9,38 @@ let storage;
 // Check if Cloudinary is configured
 const isCloudinaryConfigured = process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY;
 
-if (isCloudinaryConfigured) {
-    cloudinary.config({
-        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-        api_key: process.env.CLOUDINARY_API_KEY,
-        api_secret: process.env.CLOUDINARY_API_SECRET
-    });
+const useDiskStorage = () => {
+    const uploadDir = path.join(__dirname, '../uploads');
+    if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-    storage = new CloudinaryStorage({
-        cloudinary: cloudinary,
-        params: async (req, file) => {
-            const isVideo = file.mimetype.startsWith('video');
-            return {
-                folder: 'college_complaints',
-                resource_type: isVideo ? 'video' : 'image',
-                public_id: Date.now() + '-' + file.originalname.split('.')[0],
-            };
-        },
+    storage = multer.diskStorage({
+        destination: (req, file, cb) => cb(null, uploadDir),
+        filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
     });
-    console.log('☁️ Using Cloudinary for media storage.');
+    console.log('📁 Fallback: Using local DiskStorage for media.');
+};
+
+if (isCloudinaryConfigured) {
+    try {
+        cloudinary.config({
+            cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+            api_key: process.env.CLOUDINARY_API_KEY,
+            api_secret: process.env.CLOUDINARY_API_SECRET
+        });
+
+        storage = new CloudinaryStorage({
+            cloudinary: cloudinary,
+            params: async (req, file) => ({
+                folder: 'college_complaints',
+                resource_type: file.mimetype.startsWith('video') ? 'video' : 'image',
+                public_id: Date.now() + '-' + file.originalname.split('.')[0],
+            }),
+        });
+        console.log('☁️ Using Cloudinary for media storage.');
+    } catch (err) {
+        console.error('❌ Cloudinary Config Failed:', err.message);
+        useDiskStorage();
+    }
 } else {
     // Fallback to local storage (Manual setup requirement solved)
     const uploadDir = path.join(__dirname, '../uploads');
