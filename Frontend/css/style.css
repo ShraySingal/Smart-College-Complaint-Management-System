@@ -181,6 +181,32 @@ h1, h2, h3, h4 {
 .btn-success { background: var(--success); color: white; }
 .btn-success:hover { background: #059669; transform: translateY(-2px); }
 
+.btn-ai-small {
+    background: linear-gradient(135deg, #6366f1, #a855f7);
+    color: white;
+    border: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    box-shadow: 0 4px 10px rgba(168, 85, 247, 0.2);
+}
+
+.btn-ai-small:hover {
+    transform: scale(1.05) translateY(-1px);
+    box-shadow: 0 6px 15px rgba(168, 85, 247, 0.3);
+    filter: brightness(1.1);
+}
+
+.btn-ai-small i {
+    font-size: 0.9rem;
+}
+
 /* Login View */
 .login-wrapper {
     display: flex;

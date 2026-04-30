@@ -1136,13 +1136,11 @@ async function suggestAITag() {
 
 async function enhanceDescriptionWithAI() {
     const descInput = document.getElementById('compDesc');
-    const text = descInput.value;
-    const btn = document.getElementById('enhanceBtn');
+    const text = descInput.value.trim();
 
-    if (!text || text.trim() === '') {
-        return showToast('Please type a few words first to enhance!', 'info');
-    }
+    if (!text) return showToast('Please type a short description first (e.g. "fan broken")', 'info');
 
+    const btn = document.getElementById('enhanceAIBtn');
     const originalHTML = btn.innerHTML;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enhancing...';
     btn.disabled = true;
@@ -1158,15 +1156,15 @@ async function enhanceDescriptionWithAI() {
         });
         const data = await response.json();
         
-        if (response.ok && data.enhanced) {
+        if (data.enhanced) {
             descInput.value = data.enhanced;
-            showToast('Description magically enhanced! ✨', 'success');
+            showToast('Description enhanced by AI!', 'success');
         } else {
-            showToast(data.message || 'Could not enhance description.', 'error');
+            showToast('AI could not enhance this text.', 'warning');
         }
     } catch (e) {
-        console.error('Enhance AI Error:', e);
-        showToast('Error enhancing description.', 'error');
+        console.error('AI Error:', e);
+        showToast('AI Enhancement failed.', 'danger');
     } finally {
         btn.innerHTML = originalHTML;
         btn.disabled = false;
