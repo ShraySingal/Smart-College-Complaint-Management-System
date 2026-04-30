@@ -1,4 +1,7 @@
-const API_BASE = 'http://localhost:5010/api';
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+// TODO: Replace with your actual Render backend URL after deploying
+const PROD_BACKEND_URL = 'https://your-backend-app-name.onrender.com';
+const API_BASE = isLocal ? 'http://localhost:5010/api' : `${PROD_BACKEND_URL}/api`;
 
 let currentUser = null;
 let token = null;
@@ -104,7 +107,8 @@ async function fetchLogs() {
 
 function initSocket() {
     if (typeof io !== 'undefined') {
-        socket = io('http://localhost:5010');
+        const SOCKET_URL = isLocal ? 'http://localhost:5010' : PROD_BACKEND_URL;
+        socket = io(SOCKET_URL);
         
         socket.on('connect', () => {
             console.log('Connected to WebSocket');
