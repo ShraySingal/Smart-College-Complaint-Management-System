@@ -1009,7 +1009,7 @@ function showCapturedPreview(src) {
     preview.appendChild(name);
 }
 
-// --- NEW FEATURES: Todo List Solutions ---
+
 
 // 1. Dark/Light Mode
 const themeToggle = document.getElementById('themeToggle');
@@ -1102,7 +1102,6 @@ function updatePaginationUI() {
     if (nextBtn) nextBtn.disabled = currentPage === totalPages;
 }
 
-// --- MEDIUM PRIORITY SOLUTIONS ---
 
 // 5. AI-Powered Tagging
 async function suggestAITag() {

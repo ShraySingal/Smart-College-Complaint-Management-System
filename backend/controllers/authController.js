@@ -164,7 +164,7 @@ const forgotPassword = async (req, res) => {
 
         // In a real app, send email with token. Here we mock it.
         const resetToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '1h' });
-        console.log(`[RESET LINK MOCK]: http://localhost:5000/reset-password.html?token=${resetToken}`);
+
         
         res.status(200).json({ success: true, message: 'Reset link sent to your email (check console)' });
     } catch (error) {
