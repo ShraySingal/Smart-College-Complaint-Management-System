@@ -400,9 +400,13 @@ function setupEventListeners() {
 }
 
 async function handleRaiseComplaint(e) {
-    if (e) e.preventDefault();
-    console.log('Submitting complaint...');
-    const submitBtn = complaintForm.querySelector('button[type="submit"]');
+    if (e && typeof e.preventDefault === 'function') {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    
+    console.log('Submission started...');
+    const submitBtn = document.querySelector('#complaintForm button[type="submit"]');
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting...';
 
