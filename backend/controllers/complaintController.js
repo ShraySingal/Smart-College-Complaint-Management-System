@@ -48,17 +48,22 @@ const raiseComplaint = async (req, res) => {
             complaintId: complaint.id
         });
 
-        // --- NEW: Email Notifications ---
-        const user = await User.findByPk(req.user.id);
-        if (user) {
-            // 1. Send acknowledgment to the student
-            await sendComplaintAcknowledgeEmail(user, complaint);
-            
-            // 2. Notify all admins
-            const admins = await User.findAll({ where: { role: 'admin' } });
-            for (const admin of admins) {
-                await sendAdminNotificationEmail(admin, user, complaint);
+        // --- NEW: Email Notifications (Graceful Failure) ---
+        try {
+            const user = await User.findByPk(req.user.id);
+            if (user) {
+                // 1. Send acknowledgment to the student
+                await sendComplaintAcknowledgeEmail(user, complaint).catch(e => logger.error("Acknowledge Email failed:", e));
+                
+                // 2. Notify all admins
+                const admins = await User.findAll({ where: { role: 'admin' } });
+                for (const admin of admins) {
+                    await sendAdminNotificationEmail(admin, user, complaint).catch(e => logger.error("Admin Notification Email failed:", e));
+                }
             }
+        } catch (emailErr) {
+            logger.error("Email notification block failed:", emailErr);
+            // We don't return here so the response still goes out
         }
 
         res.status(201).json({ success: true, message: "Complaint raised successfully!", complaint });
@@ -72,7 +77,12 @@ const getMyComplaints = async (req, res) => {
     try {
         const { search, status, category } = req.query;
         const cacheKey = `complaints:user:${req.user.id}:${search}:${status}:${category}`;
-        const cachedData = await redisClient.get(cacheKey);
+        let cachedData = null;
+        try {
+            cachedData = await redisClient.get(cacheKey);
+        } catch (redisErr) {
+            logger.warn("Redis Fetch Error (Lite Mode Active):", redisErr.message);
+        }
         
         if (cachedData) return res.status(200).json(JSON.parse(cachedData));
 
@@ -87,7 +97,11 @@ const getMyComplaints = async (req, res) => {
             order: [['createdAt', 'DESC']]
         });
 
-        await redisClient.setEx(cacheKey, 60, JSON.stringify(complaints));
+        try {
+            await redisClient.setEx(cacheKey, 60, JSON.stringify(complaints));
+        } catch (redisErr) {
+            // Silent fail for setEx
+        }
         res.status(200).json(complaints);
     } catch (error) {
         logger.error('Error fetching my complaints:', error);
@@ -99,7 +113,12 @@ const getAllComplaints = async (req, res) => {
     try {
         const { page = 1, limit = 50, status, priority, search, category } = req.query;
         const cacheKey = `complaints:all:${page}:${limit}:${status}:${priority}:${search}:${category}`;
-        const cachedData = await redisClient.get(cacheKey);
+        let cachedData = null;
+        try {
+            cachedData = await redisClient.get(cacheKey);
+        } catch (redisErr) {
+            logger.warn("Redis Fetch Error (Lite Mode Active):", redisErr.message);
+        }
 
         if (cachedData) return res.status(200).json(JSON.parse(cachedData));
 
@@ -133,7 +152,11 @@ const getAllComplaints = async (req, res) => {
             complaints: rows
         };
 
-        await redisClient.setEx(cacheKey, 60, JSON.stringify(responseData));
+        try {
+            await redisClient.setEx(cacheKey, 60, JSON.stringify(responseData));
+        } catch (redisErr) {
+            // Silent fail
+        }
         res.status(200).json(responseData);
     } catch (error) {
         logger.error('Error fetching all complaints:', error);
