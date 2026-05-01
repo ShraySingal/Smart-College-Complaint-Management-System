@@ -33,7 +33,11 @@ if (isCloudinaryConfigured) {
             params: async (req, file) => ({
                 folder: 'college_complaints',
                 resource_type: file.mimetype.startsWith('video') ? 'video' : 'image',
-                public_id: (Date.now() + '-' + file.originalname.split('.')[0]).replace(/\s+/g, '_'),
+                public_id: (req, file) => {
+                    const sanitized = (Date.now() + '-' + file.originalname.split('.')[0]).replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                    console.log('📤 Cloudinary Public ID:', sanitized);
+                    return sanitized;
+                },
             }),
         });
         console.log('☁️ Using Cloudinary for media storage.');
