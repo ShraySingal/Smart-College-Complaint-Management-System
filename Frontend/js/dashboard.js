@@ -1,6 +1,8 @@
+const PROD_BACKEND_URL = 'https://my-smart-college-complaint-management.onrender.com';
+
 const API_BASE = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1') 
     ? 'http://localhost:5010/api' 
-    : '/api'; 
+    : `${PROD_BACKEND_URL}/api`; 
 
 // Fallback for non-standard local IPs
 if (window.location.hostname.startsWith('192.168.') && !API_BASE.includes('http')) {
