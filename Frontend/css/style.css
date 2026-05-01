@@ -251,6 +251,21 @@ h1, h2, h3, h4 {
     color: var(--text-muted);
 }
 
+.toggle-password {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: color 0.3s;
+    z-index: 10;
+}
+
+.toggle-password:hover {
+    color: var(--primary);
+}
+
 .input-group input, .input-group select, .input-group textarea {
     width: 100%;
     padding: 0.875rem 1rem;

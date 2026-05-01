@@ -13,6 +13,20 @@ document.addEventListener('DOMContentLoaded', () => {
     if (loginForm) loginForm.addEventListener('submit', handleLogin);
     if (registerForm) registerForm.addEventListener('submit', handleRegister);
     if (forgotPasswordForm) forgotPasswordForm.addEventListener('submit', handleForgotPassword);
+    
+    // Password toggle logic
+    const togglePassword = document.getElementById('togglePassword');
+    const password = document.getElementById('loginPassword');
+    
+    if (togglePassword && password) {
+        togglePassword.addEventListener('click', function () {
+            const type = password.getAttribute('type') === 'password' ? 'text' : 'password';
+            password.setAttribute('type', type);
+            this.classList.toggle('fa-eye');
+            this.classList.toggle('fa-eye-slash');
+        });
+    }
+
     checkAuth();
 });
 
