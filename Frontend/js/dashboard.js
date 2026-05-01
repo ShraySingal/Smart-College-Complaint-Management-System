@@ -475,10 +475,10 @@ async function handleRaiseComplaint(e) {
             loadUserComplaints();
         } else {
             const data = await response.json();
-            alert(data.message || 'Failed to submit complaint');
+            alert(`${data.message}${data.error ? ': ' + data.error : ''}`);
         }
     } catch (error) {
-        alert('Server error while submitting complaint');
+        alert('Submission Error: ' + (error.name === 'AbortError' ? 'Request timed out' : error.message));
     } finally {
         submitBtn.disabled = false;
         submitBtn.innerHTML = 'Submit Complaint';

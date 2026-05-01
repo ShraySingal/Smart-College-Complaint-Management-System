@@ -75,7 +75,10 @@ const raiseComplaint = async (req, res) => {
         res.status(201).json({ success: true, message: "Complaint raised successfully!", complaint });
     } catch (err) {
         logger.error("Raise complaint error:", err);
-        res.status(500).json({ message: 'Server error while submitting complaint' });
+        res.status(500).json({ 
+            message: 'Server error while submitting complaint', 
+            error: err.message 
+        });
     }
 };
 
