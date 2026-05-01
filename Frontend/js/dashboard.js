@@ -294,6 +294,10 @@ function setupEventListeners() {
                 sourceUpload.classList.remove('active');
                 uploadSection.style.display = 'none';
                 cameraSection.classList.add('active');
+                
+                // Auto-start camera when clicked
+                const startBtn = document.getElementById('startCamera');
+                if (startBtn) startBtn.click();
             });
         }
 
