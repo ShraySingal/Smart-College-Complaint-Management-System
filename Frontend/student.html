@@ -150,10 +150,10 @@
                         <label><i class="fa-solid fa-paperclip"></i> Attach Image/Video <span style="color:#ef4444;">(Required)</span></label>
                         
                         <div class="media-source-toggle">
-                            <button type="button" class="source-btn active" id="sourceUpload">
+                            <button type="button" class="source-btn active" id="sourceUpload" onclick="switchMediaSource('upload')">
                                 <i class="fa-solid fa-file-arrow-up"></i> From Device
                             </button>
-                            <button type="button" class="source-btn" id="sourceCapture">
+                            <button type="button" class="source-btn" id="sourceCapture" onclick="switchMediaSource('capture')">
                                 <i class="fa-solid fa-camera"></i> Real-time Capture
                             </button>
                         </div>

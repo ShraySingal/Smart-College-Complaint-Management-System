@@ -43,6 +43,30 @@ document.addEventListener('DOMContentLoaded', () => {
     initSocket();
 });
 
+function switchMediaSource(type) {
+    const sourceUpload = document.getElementById('sourceUpload');
+    const sourceCapture = document.getElementById('sourceCapture');
+    const uploadSection = document.getElementById('uploadSection');
+    const cameraSection = document.getElementById('cameraSection');
+
+    if (type === 'upload') {
+        sourceUpload.classList.add('active');
+        sourceCapture.classList.remove('active');
+        uploadSection.style.display = 'block';
+        cameraSection.classList.remove('active');
+        stopCamera();
+    } else {
+        sourceCapture.classList.add('active');
+        sourceUpload.classList.remove('active');
+        uploadSection.style.display = 'none';
+        cameraSection.classList.add('active');
+        
+        // Auto-start camera
+        const startBtn = document.getElementById('startCamera');
+        if (startBtn) startBtn.click();
+    }
+}
+
 function switchTab(tabName) {
     // Hide all tabs
     document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
