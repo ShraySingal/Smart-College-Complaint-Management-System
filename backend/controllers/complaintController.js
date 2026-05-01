@@ -91,9 +91,9 @@ const getMyComplaints = async (req, res) => {
         if (cachedData) return res.status(200).json(JSON.parse(cachedData));
 
         const whereClause = { studentId: req.user.id };
-        if (search) whereClause.title = { [Op.iLike]: `%${search}%` };
-        if (status) whereClause.status = status;
-        if (category) whereClause.category = category;
+        if (search && search.trim() !== "") whereClause.title = { [Op.iLike]: `%${search}%` };
+        if (status && status.trim() !== "") whereClause.status = status;
+        if (category && category.trim() !== "") whereClause.category = category;
 
         const complaints = await Complaint.findAll({
             where: whereClause,
@@ -128,9 +128,9 @@ const getAllComplaints = async (req, res) => {
 
         const offset = (page - 1) * limit;
         const whereClause = {};
-        if (status) whereClause.status = status;
-        if (priority) whereClause.priority = priority;
-        if (category) whereClause.category = category;
+        if (status && status.trim() !== "") whereClause.status = status;
+        if (priority && priority.trim() !== "") whereClause.priority = priority;
+        if (category && category.trim() !== "") whereClause.category = category;
         if (search) {
             whereClause[Op.or] = [
                 { title: { [Op.iLike]: `%${search}%` } },
