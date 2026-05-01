@@ -34,9 +34,9 @@ if (isCloudinaryConfigured) {
                 folder: 'college_complaints',
                 resource_type: file.mimetype.startsWith('video') ? 'video' : 'image',
                 public_id: (req, file) => {
-                    const sanitized = (Date.now() + '-' + file.originalname.split('.')[0]).replace(/[^a-z0-9]/gi, '_').toLowerCase();
-                    console.log('📤 Cloudinary Public ID:', sanitized);
-                    return sanitized;
+                    const randomId = 'comp_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+                    console.log('📤 Cloudinary Public ID:', randomId);
+                    return randomId;
                 },
             }),
         });
