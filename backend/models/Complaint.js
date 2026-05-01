@@ -20,7 +20,7 @@ const Complaint = sequelize.define('Complaint', {
         allowNull: false,
     },
     category: {
-        type: DataTypes.ENUM('Electricity', 'Water', 'Internet', 'Other'),
+        type: DataTypes.ENUM('Electricity', 'Water', 'Internet', 'Furniture', 'Hygiene', 'Other'),
         allowNull: false,
     },
     priority: {
