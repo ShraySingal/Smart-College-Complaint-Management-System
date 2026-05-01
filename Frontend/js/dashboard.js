@@ -364,39 +364,7 @@ function setupEventListeners() {
         feedbackForm.addEventListener('submit', submitFeedback);
     }
 
-    const changePasswordForm = document.getElementById('changePasswordForm');
-    if (changePasswordForm) {
-        changePasswordForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const currentPassword = document.getElementById('currentPassword').value;
-            const newPassword = document.getElementById('newPassword').value;
-            const btn = changePasswordForm.querySelector('button');
-            btn.disabled = true;
-
-            try {
-                const response = await fetch(`${API_BASE}/auth/change-password`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ currentPassword, newPassword })
-                });
-                const data = await response.json();
-                if (response.ok) {
-                    showToast('Password updated!', 'success');
-                    document.getElementById('settingsModal').classList.remove('active');
-                    changePasswordForm.reset();
-                } else {
-                    alert(data.message);
-                }
-            } catch (e) {
-                alert('Error updating password');
-            } finally {
-                btn.disabled = false;
-            }
-        });
-    }
+    // Remove duplicated block from here as it was already handled at line 234
 }
 
 async function handleRaiseComplaint(e) {
@@ -474,9 +442,10 @@ async function loadUserComplaints() {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const complaints = await response.json();
+        console.log(`Fetched ${complaints.length} complaints from ${API_BASE}`);
         currentComplaints = complaints;
 
-        if (complaints.length === 0) {
+        if (!Array.isArray(complaints) || complaints.length === 0) {
             list.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted)"><i class="fa-solid fa-info-circle"></i> No complaints found.</td></tr>`;
             return;
         }

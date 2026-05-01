@@ -39,8 +39,12 @@ const raiseComplaint = async (req, res) => {
             deadline
         });
 
-        await redisClient.del(`complaints:user:${req.user.id}`);
-        await redisClient.del('complaints:all');
+        try {
+            await redisClient.del(`complaints:user:${req.user.id}`);
+            await redisClient.del('complaints:all');
+        } catch (redisErr) {
+            logger.warn("Redis Cache Invalidation failed (Lite Mode Active)");
+        }
 
         req.app.get('io').emit('admin_notification', {
             type: 'NEW_COMPLAINT',
@@ -191,8 +195,12 @@ const resolveComplaint = async (req, res) => {
 
         await t.commit();
 
-        const keys = await redisClient.keys('complaints:*');
-        if (keys.length > 0) await redisClient.del(keys);
+        try {
+            const keys = await redisClient.keys('complaints:*');
+            if (keys.length > 0) await redisClient.del(keys);
+        } catch (redisErr) {
+            logger.warn("Redis Resolve Cache Invalidation failed");
+        }
 
         req.app.get('io').to(complaint.User.id).emit('user_notification', {
             type: 'COMPLAINT_RESOLVED',
@@ -227,8 +235,12 @@ const bulkResolve = async (req, res) => {
         );
 
         await t.commit();
-        const keys = await redisClient.keys('complaints:*');
-        if (keys.length > 0) await redisClient.del(keys);
+        try {
+            const keys = await redisClient.keys('complaints:*');
+            if (keys.length > 0) await redisClient.del(keys);
+        } catch (redisErr) {
+            logger.warn("Redis Assign Cache Invalidation failed");
+        }
 
         res.status(200).json({ success: true, message: `${ids.length} complaints resolved` });
     } catch (error) {
@@ -250,8 +262,12 @@ const assignComplaint = async (req, res) => {
         complaint.status = 'In Progress';
         await complaint.save();
 
-        const keys = await redisClient.keys('complaints:*');
-        if (keys.length > 0) await redisClient.del(keys);
+        try {
+            const keys = await redisClient.keys('complaints:*');
+            if (keys.length > 0) await redisClient.del(keys);
+        } catch (redisErr) {
+            logger.warn("Redis Reopen Cache Invalidation failed");
+        }
 
         res.status(200).json({ success: true, message: 'Complaint assigned successfully' });
     } catch (error) {
