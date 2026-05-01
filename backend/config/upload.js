@@ -7,8 +7,7 @@ const fs = require('fs');
 let storage;
 
 // Check if Cloudinary is configured
-// Forced to false because Cloudinary signature is invalid
-const isCloudinaryConfigured = false;
+const isCloudinaryConfigured = process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET;
 
 const useDiskStorage = () => {
     const uploadDir = path.join(__dirname, '../uploads');

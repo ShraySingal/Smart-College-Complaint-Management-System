@@ -1,7 +1,10 @@
-const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-// Production Render backend URL
-const PROD_BACKEND_URL = 'https://my-smart-college-complaint-management.onrender.com';
-const API_BASE = isLocal ? 'http://localhost:5010/api' : `${PROD_BACKEND_URL}/api`;
+const isLocal = window.location.hostname === 'localhost' || 
+                 window.location.hostname === '127.0.0.1' || 
+                 window.location.hostname.startsWith('192.168.') || 
+                 !window.location.hostname.includes('.');
+
+// If served from the backend, we can use relative paths
+const API_BASE = window.location.port === '5010' ? '/api' : (isLocal ? 'http://localhost:5010/api' : 'https://my-smart-college-complaint-management.onrender.com/api');
 
 let currentUser = null;
 let token = null;
@@ -27,7 +30,13 @@ const toast = document.getElementById('toast');
 
 let socket = null;
 
+window.onerror = function(msg, url, line) {
+    alert(`DEBUG ERROR: ${msg} at ${line}`);
+    return false;
+};
+
 document.addEventListener('DOMContentLoaded', () => {
+    console.log(`System Initialized. API Base: ${API_BASE}`);
     initDashboard();
     setupEventListeners();
     initSocket();
