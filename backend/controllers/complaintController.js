@@ -54,23 +54,25 @@ const raiseComplaint = async (req, res) => {
             complaintId: complaint.id
         });
 
-        // --- NEW: Email Notifications (Graceful Failure) ---
-        try {
-            const user = await User.findByPk(req.user.id);
-            if (user) {
-                // 1. Send acknowledgment to the student
-                await sendComplaintAcknowledgeEmail(user, complaint).catch(e => logger.error("Acknowledge Email failed:", e));
-                
-                // 2. Notify all admins
-                const admins = await User.findAll({ where: { role: 'admin' } });
-                for (const admin of admins) {
-                    await sendAdminNotificationEmail(admin, user, complaint).catch(e => logger.error("Admin Notification Email failed:", e));
+        // --- NEW: Email Notifications (Asynchronous / Fire-and-Forget) ---
+        // We don't 'await' this block so the response goes back to the user immediately
+        (async () => {
+            try {
+                const user = await User.findByPk(req.user.id);
+                if (user) {
+                    // 1. Send acknowledgment to the student
+                    sendComplaintAcknowledgeEmail(user, complaint).catch(e => logger.error("Acknowledge Email failed:", e));
+                    
+                    // 2. Notify all admins (In parallel)
+                    const admins = await User.findAll({ where: { role: 'admin' } });
+                    Promise.all(admins.map(admin => 
+                        sendAdminNotificationEmail(admin, user, complaint).catch(e => logger.error(`Admin Email failed for ${admin.email}:`, e))
+                    ));
                 }
+            } catch (emailErr) {
+                logger.error("Background email process failed:", emailErr);
             }
-        } catch (emailErr) {
-            logger.error("Email notification block failed:", emailErr);
-            // We don't return here so the response still goes out
-        }
+        })();
 
         res.status(201).json({ success: true, message: "Complaint raised successfully!", complaint });
     } catch (err) {
