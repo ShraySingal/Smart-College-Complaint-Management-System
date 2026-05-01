@@ -39,11 +39,20 @@ window.onerror = function(msg, url, line) {
     return false;
 };
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     console.log(`System Initialized. API Base: ${API_BASE}`);
     initDashboard();
     setupEventListeners();
     initSocket();
+    
+    // Health check
+    try {
+        const start = Date.now();
+        const res = await fetch(`${API_BASE.replace('/api', '')}/health`, { mode: 'no-cors' });
+        console.log(`Backend Health Check: ${res.type} in ${Date.now() - start}ms`);
+    } catch (e) {
+        console.error('Backend unreachable:', e);
+    }
 });
 
 function switchMediaSource(type) {
@@ -443,13 +452,19 @@ async function handleRaiseComplaint(e) {
     }
 
     try {
+        // 60-second timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000);
+
         const response = await fetch(`${API_BASE}/complaints/raise`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`
             },
-            body: formData
+            body: formData,
+            signal: controller.signal
         });
+        clearTimeout(timeoutId);
 
         if (response.ok) {
             showToast('Complaint registered successfully!');
