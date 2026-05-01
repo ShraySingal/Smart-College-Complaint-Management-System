@@ -87,6 +87,7 @@ const raiseComplaint = async (req, res) => {
 const getMyComplaints = async (req, res) => {
     try {
         const { search, status, category } = req.query;
+        logger.info(`🔍 Fetching complaints for User: ${req.user.id} | Filters: search=${search}, status=${status}, category=${category}`);
         const cacheKey = `complaints:user:${req.user.id}:${search}:${status}:${category}`;
         /*
         let cachedData = null;
@@ -109,6 +110,7 @@ const getMyComplaints = async (req, res) => {
             include: [{ model: Feedback }],
             order: [['createdAt', 'DESC']]
         });
+        logger.info(`✅ Found ${complaints.length} complaints for user ${req.user.id}`);
 
         /* 
         try {

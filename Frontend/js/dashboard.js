@@ -498,6 +498,7 @@ async function loadUserComplaints() {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const complaints = await response.json();
+        alert(`SUCCESS: Received ${complaints.length} complaints from server.`);
         console.log(`Fetched ${complaints.length} complaints from ${API_BASE}`);
         currentComplaints = complaints;
 
@@ -872,12 +873,6 @@ async function loadAssignedTasks() {
             document.getElementById('assignedTasksSection').style.display = 'block';
         }
     } catch (e) {}
-}
-
-async function loadUserComplaints() {
-    const checked = document.querySelectorAll('.complaint-checkbox:checked');
-    const btn = document.getElementById('bulkResolveBtn');
-    if (btn) btn.style.display = checked.length > 0 ? 'block' : 'none';
 }
 
 function toggleBulkBtn() {
