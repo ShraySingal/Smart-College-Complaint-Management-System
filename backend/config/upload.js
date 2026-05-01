@@ -33,11 +33,7 @@ if (isCloudinaryConfigured) {
             params: async (req, file) => ({
                 folder: 'college_complaints',
                 resource_type: file.mimetype.startsWith('video') ? 'video' : 'image',
-                public_id: (req, file) => {
-                    const randomId = 'comp_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
-                    console.log('📤 Cloudinary Public ID:', randomId);
-                    return randomId;
-                },
+                public_id: 'comp_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
             }),
         });
         console.log('☁️ Using Cloudinary for media storage.');
