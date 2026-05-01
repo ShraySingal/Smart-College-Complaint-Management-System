@@ -88,6 +88,7 @@ const getMyComplaints = async (req, res) => {
     try {
         const { search, status, category } = req.query;
         const cacheKey = `complaints:user:${req.user.id}:${search}:${status}:${category}`;
+        /*
         let cachedData = null;
         try {
             cachedData = await redisClient.get(cacheKey);
@@ -96,6 +97,7 @@ const getMyComplaints = async (req, res) => {
         }
         
         if (cachedData) return res.status(200).json(JSON.parse(cachedData));
+        */
 
         const whereClause = { studentId: req.user.id };
         if (search && search.trim() !== "") whereClause.title = { [Op.iLike]: `%${search}%` };
@@ -108,11 +110,13 @@ const getMyComplaints = async (req, res) => {
             order: [['createdAt', 'DESC']]
         });
 
+        /* 
         try {
             await redisClient.setEx(cacheKey, 60, JSON.stringify(complaints));
         } catch (redisErr) {
             // Silent fail for setEx
         }
+        */
         res.status(200).json(complaints);
     } catch (error) {
         logger.error('Error fetching my complaints:', error);
