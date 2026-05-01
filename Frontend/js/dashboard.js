@@ -1,10 +1,11 @@
-const isLocal = window.location.hostname === 'localhost' || 
-                 window.location.hostname === '127.0.0.1' || 
-                 window.location.hostname.startsWith('192.168.') || 
-                 !window.location.hostname.includes('.');
+const API_BASE = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1') 
+    ? 'http://localhost:5010/api' 
+    : '/api'; 
 
-// If served from the backend, we can use relative paths
-const API_BASE = window.location.port === '5010' ? '/api' : (isLocal ? 'http://localhost:5010/api' : 'https://my-smart-college-complaint-management.onrender.com/api');
+// Fallback for non-standard local IPs
+if (window.location.hostname.startsWith('192.168.') && !API_BASE.includes('http')) {
+    API_BASE = `http://${window.location.hostname}:5010/api`;
+}
 
 let currentUser = null;
 let token = null;
