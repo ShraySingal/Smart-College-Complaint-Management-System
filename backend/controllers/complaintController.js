@@ -9,8 +9,10 @@ const { suggestCategory } = require('../utils/aiTagger');
 const { sendSMS } = require('../utils/smsService');
 
 const raiseComplaint = async (req, res) => {
+    logger.info(`Incoming Complaint Submission: User ${req.user?.id} (${req.user?.email})`);
     try {
         const { title, description, category, room, location, latitude, longitude } = req.body;
+        logger.info(`Data: title=${title}, category=${category}, location=${location}, hasFile=${!!req.file}`);
 
         let attachmentUrl = null;
         if (req.file) {
