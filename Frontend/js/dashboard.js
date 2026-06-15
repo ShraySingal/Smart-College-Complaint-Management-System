@@ -1,5 +1,5 @@
 const PROD_BACKEND_URL = 'https://my-smart-college-complaint-management.onrender.com';
-const isLocal = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1');
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:';
 
 const API_BASE = isLocal 
     ? 'http://localhost:5010/api' 
@@ -14,6 +14,16 @@ let currentUser = null;
 let token = null;
 let capturedBlob = null;
 let mediaStream = null;
+let profileStream = null;
+let complaintMediaRecorder = null;
+let complaintRecordedChunks = [];
+let currentFacingMode = 'environment';
+let profFacingMode = 'user';
+let resolveFacingMode = 'environment';
+let resolveMediaStream = null;
+let resolveMediaRecorder = null;
+let resolveRecordedChunks = [];
+let resolveCapturedBlob = null;
 let currentComplaints = [];
 let currentPage = 1;
 let totalPages = 1;
@@ -41,6 +51,7 @@ window.onerror = function(msg, url, line) {
 
 document.addEventListener('DOMContentLoaded', async () => {
     console.log(`System Initialized. API Base: ${API_BASE}`);
+    initTheme();
     initDashboard();
     setupEventListeners();
     initSocket();
@@ -81,19 +92,29 @@ function switchMediaSource(type) {
 
 function switchTab(tabName) {
     // Hide all tabs
-    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+        tab.style.display = 'none';
+    });
     document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
 
     // Show selected tab
     const selectedTab = document.getElementById(`${tabName}Tab`);
-    if (selectedTab) selectedTab.classList.add('active');
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+        selectedTab.style.display = 'block';
+    }
     
     // Update button state
-    event.currentTarget.classList.add('active');
+    if (event && event.currentTarget) event.currentTarget.classList.add('active');
 
+    // Load data for the selected tab
     if (tabName === 'logs') fetchLogs();
     if (tabName === 'analytics') updateAdminStats();
     if (tabName === 'users') fetchUsers();
+    if (tabName === 'aiInsights') { loadRecommendations(); loadFAQ(); }
+    if (tabName === 'rankings') loadDeptPerformance();
+    if (tabName === 'hostelTracker') loadHostelTracking();
 }
 
 async function fetchUsers() {
@@ -194,15 +215,14 @@ function initDashboard() {
 
     populateProfileCard(currentUser);
     startHealthWatchdog();
+    loadNotifications();
 
     // Load appropriate data based on page
     if (window.location.pathname.includes('admin.html')) {
         loadAdminComplaints();
     } else {
         loadUserComplaints();
-        if (currentUser.role === 'Staff' || currentUser.role === 'Teacher') {
-            loadAssignedTasks();
-        }
+
     }
 }
 
@@ -235,7 +255,25 @@ function showOfflineOverlay() {
     overlay.style.display = 'flex';
 }
 
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme');
+    const themeToggleBtn = document.getElementById('themeToggle');
+    if (savedTheme === 'dark') {
+        document.body.classList.add('dark-theme');
+        if (themeToggleBtn) themeToggleBtn.innerHTML = '<i class="fa-solid fa-sun"></i>';
+    }
+}
+
 function setupEventListeners() {
+    const themeToggleBtn = document.getElementById('themeToggle');
+    if (themeToggleBtn) {
+        themeToggleBtn.addEventListener('click', () => {
+            const isDark = document.body.classList.toggle('dark-theme');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            themeToggleBtn.innerHTML = isDark ? '<i class="fa-solid fa-sun"></i>' : '<i class="fa-solid fa-moon"></i>';
+        });
+    }
+
     if (logoutBtn) {
         logoutBtn.addEventListener('click', () => {
             localStorage.removeItem('token');
@@ -337,39 +375,6 @@ function setupEventListeners() {
             });
         }
 
-        // Camera logic
-        const startCameraBtn = document.getElementById('startCamera');
-        const capturePhotoBtn = document.getElementById('capturePhoto');
-        const cameraStream = document.getElementById('cameraStream');
-        const photoCanvas = document.getElementById('photoCanvas');
-
-        if (startCameraBtn) {
-            startCameraBtn.addEventListener('click', async () => {
-                try {
-                    mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                    cameraStream.srcObject = mediaStream;
-                    startCameraBtn.style.display = 'none';
-                    capturePhotoBtn.style.display = 'inline-flex';
-                } catch (err) {
-                    alert('Could not access camera: ' + err.message);
-                }
-            });
-        }
-
-        if (capturePhotoBtn) {
-            capturePhotoBtn.addEventListener('click', () => {
-                const context = photoCanvas.getContext('2d');
-                photoCanvas.width = cameraStream.videoWidth;
-                photoCanvas.height = cameraStream.videoHeight;
-                context.drawImage(cameraStream, 0, 0, photoCanvas.width, photoCanvas.height);
-                
-                photoCanvas.toBlob((blob) => {
-                    capturedBlob = blob;
-                    showCapturedPreview(URL.createObjectURL(blob));
-                }, 'image/jpeg');
-            });
-        }
-
         // File preview
         const fileInput = document.getElementById('compAttachment');
         if (fileInput) {
@@ -413,8 +418,6 @@ function setupEventListeners() {
     if (feedbackForm) {
         feedbackForm.addEventListener('submit', submitFeedback);
     }
-
-    // Remove duplicated block from here as it was already handled at line 234
 }
 
 async function handleRaiseComplaint(e) {
@@ -444,9 +447,12 @@ async function handleRaiseComplaint(e) {
     formData.append('description', document.getElementById('compDesc').value);
     formData.append('location', document.getElementById('compLocation').value);
     formData.append('room', document.getElementById('compRoom').value);
+    const anonCheck = document.getElementById('compAnonymous');
+    if (anonCheck && anonCheck.checked) formData.append('isAnonymous', 'true');
     
     if (capturedBlob) {
-        formData.append('attachment', capturedBlob, 'capture.jpg');
+        const ext = capturedBlob.type.includes('video') ? 'webm' : 'jpg';
+        formData.append('attachment', capturedBlob, `capture_${Date.now()}.${ext}`);
     } else {
         formData.append('attachment', file);
     }
@@ -489,6 +495,16 @@ async function loadUserComplaints() {
     const list = document.getElementById('userComplaintsList');
     if (!list) return;
 
+    list.innerHTML = Array(3).fill(`
+        <tr>
+            <td><div class="skeleton skeleton-text"></div></td>
+            <td><div class="skeleton skeleton-badge"></div></td>
+            <td><div class="skeleton skeleton-badge"></div></td>
+            <td><div class="skeleton skeleton-text short"></div></td>
+            <td><div class="skeleton skeleton-badge" style="width:80px"></div></td>
+        </tr>
+    `).join('');
+
     try {
         const search = document.getElementById('searchInput')?.value || '';
         const status = document.getElementById('statusFilter')?.value || '';
@@ -514,9 +530,6 @@ async function loadUserComplaints() {
                 <td><span class="badge badge-${c.status === 'Resolved' ? 'resolved' : 'pending'}">${c.status}</span></td>
                 <td>${new Date(c.createdAt).toLocaleDateString()}</td>
                 <td>
-                    <button class="btn btn-outline btn-sm" onclick="openViewComplaintModal('${c.id}')">
-                        <i class="fa-solid fa-eye"></i> View
-                    </button>
                     ${c.status === 'Resolved' ? (c.Feedback ? `
                         <span style="color: var(--success); font-size: 0.85rem; font-weight: 500;">
                             <i class="fa-solid fa-check-double"></i> Feedback Sent
@@ -537,6 +550,18 @@ async function loadUserComplaints() {
 async function loadAdminComplaints() {
     const list = document.getElementById('adminComplaintsList');
     if (!list) return;
+
+    list.innerHTML = Array(5).fill(`
+        <tr>
+            <td><div class="skeleton skeleton-text" style="width: 20px;"></div></td>
+            <td><div class="skeleton skeleton-text"></div><div class="skeleton skeleton-text short"></div></td>
+            <td><div class="skeleton skeleton-text"></div></td>
+            <td><div class="skeleton skeleton-badge"></div></td>
+            <td><div class="skeleton skeleton-badge"></div></td>
+            <td><div class="skeleton skeleton-badge"></div></td>
+            <td><div class="skeleton skeleton-badge" style="width: 80px;"></div></td>
+        </tr>
+    `).join('');
 
     try {
         const search = document.getElementById('searchInput')?.value || '';
@@ -578,9 +603,6 @@ async function loadAdminComplaints() {
                     </td>
                     <td><span class="badge badge-${c.status === 'Resolved' ? 'resolved' : 'pending'}">${c.status}</span></td>
                     <td>
-                        <button class="btn btn-outline btn-sm" onclick="openViewComplaintModal('${c.id}')">
-                            <i class="fa-solid fa-eye"></i> Details
-                        </button>
                         ${c.status !== 'Resolved' ? `
                             <button class="btn btn-success btn-sm" onclick="openResolveModal('${c.id}')">
                                 <i class="fa-solid fa-check"></i> Resolve
@@ -595,6 +617,65 @@ async function loadAdminComplaints() {
         await updateAdminStats();
     } catch (error) {
         console.error("Load admin error:", error);
+    }
+}
+
+let statusChartInstance = null;
+let categoryChartInstance = null;
+
+function renderCharts(stats) {
+    // Status Chart
+    const statusCtx = document.getElementById('statusChart');
+    if (statusCtx) {
+        if (statusChartInstance) statusChartInstance.destroy();
+        statusChartInstance = new Chart(statusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Pending', 'In Progress', 'Resolved'],
+                datasets: [{
+                    data: [stats.pending, stats.inProgress || 0, stats.resolved],
+                    backgroundColor: ['#f59e0b', '#3b82f6', '#10b981'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: '#e2e8f0' } }
+                }
+            }
+        });
+    }
+
+    // Category Chart
+    const categoryCtx = document.getElementById('categoryChart');
+    if (categoryCtx && stats.categoryData) {
+        if (categoryChartInstance) categoryChartInstance.destroy();
+        const labels = stats.categoryData.map(c => c.category);
+        const data = stats.categoryData.map(c => c.count);
+        
+        categoryChartInstance = new Chart(categoryCtx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Complaints',
+                    data: data,
+                    backgroundColor: '#8b5cf6',
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.1)' } },
+                    x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
     }
 }
 
@@ -614,7 +695,13 @@ async function updateAdminStats() {
         if (pendingEl) pendingEl.textContent = stats.pending;
         if (resolvedEl) resolvedEl.textContent = stats.resolved;
         if (overdueEl) overdueEl.textContent = stats.overdue;
-    } catch (e) {}
+
+        if (typeof Chart !== 'undefined') {
+            renderCharts(stats);
+        }
+    } catch (e) {
+        console.error('Stats error:', e);
+    }
 }
 
 function openResolveModal(id) {
@@ -633,7 +720,13 @@ async function submitResolution(e) {
     
     const formData = new FormData();
     formData.append('resolutionSummary', summary);
-    if (fileInput.files[0]) {
+    
+    if (resolveCapturedBlob) {
+        // Handle captured photo/video
+        const ext = resolveCapturedBlob.type.includes('video') ? 'webm' : 'jpg';
+        formData.append('attachment', new File([resolveCapturedBlob], `resolution_proof_${Date.now()}.${ext}`, { type: resolveCapturedBlob.type }));
+    } else if (fileInput && fileInput.files[0]) {
+        // Handle normal file upload
         formData.append('attachment', fileInput.files[0]);
     }
 
@@ -676,7 +769,7 @@ function openFeedbackModal(id) {
 }
 
 async function openViewComplaintModal(id) {
-    const complaint = currentComplaints.find(c => c.id === id);
+    const complaint = currentComplaints.find(c => String(c.id) === String(id));
     if (!complaint) return;
 
     const modal = document.getElementById('viewComplaintModal');
@@ -764,10 +857,6 @@ async function openViewComplaintModal(id) {
         }
     }
 
-    const assignSection = document.getElementById('assignSection');
-    if (assignSection) {
-        assignSection.style.display = (currentUser.role === 'admin' && complaint.status !== 'Resolved') ? 'block' : 'none';
-    }
 
     // Add Reopen button for users
     const modalFooter = modal.querySelector('.modal-body');
@@ -786,6 +875,11 @@ async function openViewComplaintModal(id) {
 
     modal.classList.add('active');
 
+    // Load AI features: Timeline, Similar, Summary
+    loadTimeline(complaint.id);
+    loadSimilarComplaints(complaint.id);
+    summarizeComplaint(complaint.id);
+
     // Load Chat and Map
     loadMessages(complaint.id);
     setTimeout(() => initComplaintMap(complaint.location), 300); // Small delay for modal animation
@@ -803,8 +897,14 @@ if (!document.getElementById('viewCompId')) {
 async function submitFeedback(e) {
     e.preventDefault();
     const id = document.getElementById('feedbackComplaintId').value;
-    const rating = parseInt(document.getElementById('feedRating').value, 10);
+    const ratingEl = document.querySelector('input[name="feedRating"]:checked');
+    const rating = ratingEl ? parseInt(ratingEl.value, 10) : 0;
     const message = document.getElementById('feedMessage').value;
+
+    if (!rating) {
+        alert('Please select a star rating.');
+        return;
+    }
     const submitBtn = feedbackForm.querySelector('button');
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Submitting...';
@@ -846,34 +946,7 @@ function applyFilters() {
     }
 }
 
-async function loadAssignedTasks() {
-    const list = document.getElementById('assignedTasksList');
-    if (!list) return;
 
-    try {
-        const response = await fetch(`${API_BASE}/complaints/assigned`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const complaints = await response.json();
-        list.innerHTML = complaints.map(c => `
-            <tr>
-                <td>${c.user?.name || 'Unknown'}</td>
-                <td>${c.title}</td>
-                <td><span class="badge badge-low">${c.category}</span></td>
-                <td><span class="badge badge-${c.status.replace(' ', '').toLowerCase()}">${c.status}</span></td>
-                <td>${c.deadline ? new Date(c.deadline).toLocaleDateString() : 'N/A'}</td>
-                <td>
-                    <button class="btn btn-outline btn-sm" onclick="viewComplaint('${c.id}')"><i class="fa-solid fa-eye"></i></button>
-                    ${c.status !== 'Resolved' ? `<button class="btn btn-success btn-sm" onclick="openResolveModal('${c.id}')"><i class="fa-solid fa-check"></i></button>` : ''}
-                </td>
-            </tr>
-        `).join('');
-        
-        if (complaints.length > 0) {
-            document.getElementById('assignedTasksSection').style.display = 'block';
-        }
-    } catch (e) {}
-}
 
 function toggleBulkBtn() {
     const checked = document.querySelectorAll('.complaint-checkbox:checked');
@@ -905,49 +978,7 @@ async function openBulkResolveModal() {
     }
 }
 
-async function loadStaffList() {
-    const select = document.getElementById('assignStaffSelect');
-    if (!select || select.children.length > 1) return;
 
-    try {
-        const response = await fetch(`${API_BASE}/auth/staff`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const staff = await response.json();
-        staff.forEach(s => {
-            const opt = document.createElement('option');
-            opt.value = s.id;
-            opt.textContent = `${s.name} (${s.department || 'General'})`;
-            select.appendChild(opt);
-        });
-    } catch (e) {}
-}
-
-async function submitAssignment() {
-    const id = document.getElementById('viewCompId')?.value;
-    const staffId = document.getElementById('assignStaffSelect').value;
-    
-    if (!staffId) return alert('Please select a staff member');
-
-    try {
-        const response = await fetch(`${API_BASE}/complaints/${id}/assign`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ assignedTo: staffId })
-        });
-        if (response.ok) {
-            showToast('Complaint assigned successfully', 'success');
-            loadAdminComplaints();
-            const viewModal = document.getElementById('viewComplaintModal');
-            if (viewModal) viewModal.classList.remove('active');
-        }
-    } catch (error) {
-        showToast('Assignment failed', 'danger');
-    }
-}
 
 async function reopenComplaint(id) {
     if (confirm('Are you sure you want to reopen this complaint?')) {
@@ -1003,17 +1034,156 @@ function populateProfileCard(user) {
 
 }
 
+// =======================
+// Main Camera Logic
+// =======================
+async function startCamera() {
+    const cameraStream = document.getElementById('cameraStream');
+    const startCameraBtn = document.getElementById('startCamera');
+    const capturePhotoBtn = document.getElementById('capturePhoto');
+    const switchCameraBtn = document.getElementById('switchCamera');
+    const startVideoBtn = document.getElementById('startVideoBtn');
+    const stopVideoBtn = document.getElementById('stopVideoBtn');
+    const photoCanvas = document.getElementById('photoCanvas');
+    const preview = document.getElementById('filePreview');
+
+    try {
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+        }
+        mediaStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: currentFacingMode },
+            audio: true
+        });
+        if(cameraStream) {
+            cameraStream.srcObject = mediaStream;
+            cameraStream.style.display = 'block';
+        }
+        if(photoCanvas) photoCanvas.style.display = 'none';
+        if(preview) preview.innerHTML = '';
+        capturedBlob = null;
+        if(startCameraBtn) startCameraBtn.style.display = 'none';
+        if(capturePhotoBtn) capturePhotoBtn.style.display = 'inline-block';
+        if(switchCameraBtn) switchCameraBtn.style.display = 'inline-block';
+        if(startVideoBtn) startVideoBtn.style.display = 'inline-block';
+        if(stopVideoBtn) stopVideoBtn.style.display = 'none';
+    } catch (err) {
+        alert('Could not access camera: ' + err.message);
+    }
+}
+
+function capturePhoto() {
+    const cameraStream = document.getElementById('cameraStream');
+    const photoCanvas = document.getElementById('photoCanvas');
+    const capturePhotoBtn = document.getElementById('capturePhoto');
+    const switchCameraBtn = document.getElementById('switchCamera');
+
+    if(!photoCanvas || !cameraStream) return;
+    const context = photoCanvas.getContext('2d');
+    photoCanvas.width = cameraStream.videoWidth || 640;
+    photoCanvas.height = cameraStream.videoHeight || 480;
+    context.drawImage(cameraStream, 0, 0, photoCanvas.width, photoCanvas.height);
+    
+    photoCanvas.toBlob((blob) => {
+        capturedBlob = blob;
+        showCapturedPreview(URL.createObjectURL(blob));
+    }, 'image/jpeg');
+
+    cameraStream.style.display = 'none';
+    photoCanvas.style.display = 'block';
+    if(capturePhotoBtn) capturePhotoBtn.style.display = 'none';
+    if(switchCameraBtn) switchCameraBtn.style.display = 'none';
+    
+    if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+    }
+}
+
+function toggleCamera() {
+    currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+    startCamera();
+}
+
 function stopCamera() {
     if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
         mediaStream = null;
     }
+    const cameraStream = document.getElementById('cameraStream');
+    const photoCanvas = document.getElementById('photoCanvas');
+    const preview = document.getElementById('filePreview');
     const startCameraBtn = document.getElementById('startCamera');
     const capturePhotoBtn = document.getElementById('capturePhoto');
-    const cameraStream = document.getElementById('cameraStream');
+    const switchCameraBtn = document.getElementById('switchCamera');
+    const startVideoBtn = document.getElementById('startVideoBtn');
+    const stopVideoBtn = document.getElementById('stopVideoBtn');
+    
+    if (cameraStream) cameraStream.style.display = 'block';
+    if (photoCanvas) photoCanvas.style.display = 'none';
+    if (preview) preview.innerHTML = '';
     if (startCameraBtn) startCameraBtn.style.display = 'inline-flex';
     if (capturePhotoBtn) capturePhotoBtn.style.display = 'none';
+    if (switchCameraBtn) switchCameraBtn.style.display = 'none';
+    if (startVideoBtn) startVideoBtn.style.display = 'none';
+    if (stopVideoBtn) stopVideoBtn.style.display = 'none';
     if (cameraStream) cameraStream.srcObject = null;
+}
+
+function startComplaintVideoRecording() {
+    if (!mediaStream) return;
+    
+    complaintRecordedChunks = [];
+    complaintMediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/webm' });
+
+    complaintMediaRecorder.ondataavailable = function(event) {
+        if (event.data.size > 0) {
+            complaintRecordedChunks.push(event.data);
+        }
+    };
+
+    complaintMediaRecorder.onstop = function() {
+        capturedBlob = new Blob(complaintRecordedChunks, { type: 'video/webm' });
+        // Stop the camera stream without clearing the preview
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+            mediaStream = null;
+        }
+        const cameraStreamEl = document.getElementById('cameraStream');
+        const startCameraBtn = document.getElementById('startCamera');
+        const startVideoBtn = document.getElementById('startVideoBtn');
+        const stopVideoBtn = document.getElementById('stopVideoBtn');
+        if (cameraStreamEl) { cameraStreamEl.style.display = 'none'; cameraStreamEl.srcObject = null; }
+        if (startCameraBtn) startCameraBtn.style.display = 'inline-flex';
+        if (startVideoBtn) startVideoBtn.style.display = 'none';
+        if (stopVideoBtn) stopVideoBtn.style.display = 'none';
+        
+        const preview = document.getElementById('filePreview');
+        if (preview) {
+            preview.innerHTML = `<video src="${URL.createObjectURL(capturedBlob)}" controls style="max-width:100%; max-height:150px; border-radius:8px;"></video>
+            <p style="font-size:0.8rem; color:#64748b; margin-top:0.3rem;">Recorded Video</p>`;
+        }
+    };
+
+    complaintMediaRecorder.start();
+    
+    const capturePhotoBtn = document.getElementById('capturePhoto');
+    const startVideoBtn = document.getElementById('startVideoBtn');
+    const stopVideoBtn = document.getElementById('stopVideoBtn');
+    const switchCameraBtn = document.getElementById('switchCamera');
+    
+    if (capturePhotoBtn) capturePhotoBtn.style.display = 'none';
+    if (startVideoBtn) startVideoBtn.style.display = 'none';
+    if (switchCameraBtn) switchCameraBtn.style.display = 'none';
+    if (stopVideoBtn) stopVideoBtn.style.display = 'inline-block';
+    showToast('Recording started...', 'info');
+}
+
+function stopComplaintVideoRecording() {
+    if (complaintMediaRecorder && complaintMediaRecorder.state !== 'inactive') {
+        complaintMediaRecorder.stop();
+        showToast('Recording stopped', 'success');
+    }
 }
 
 function showCapturedPreview(src) {
@@ -1054,14 +1224,264 @@ if (themeToggle) {
 }
 
 // 2. Profile Photo Upload
-async function uploadProfilePhoto(input) {
-    const file = input.files[0];
-    if (!file) return;
 
-    const formData = new FormData();
-    formData.append('profilePhoto', file);
+function openProfilePhotoModal() {
+    const modal = document.getElementById('profilePhotoModal');
+    if (modal) {
+        modal.classList.add('active');
+        switchProfileMediaSource('upload');
+    }
+}
+
+function closeProfilePhotoModal() {
+    const modal = document.getElementById('profilePhotoModal');
+    if (modal) {
+        modal.classList.remove('active');
+        stopProfileCamera();
+    }
+}
+
+function switchProfileMediaSource(type) {
+    const sourceUpload = document.getElementById('profSourceUpload');
+    const sourceCapture = document.getElementById('profSourceCapture');
+    const uploadSection = document.getElementById('profUploadSection');
+    const cameraSection = document.getElementById('profCameraSection');
+
+    if (!sourceUpload) return; // Might not exist on admin.html
+
+    if (type === 'upload') {
+        sourceUpload.classList.add('active');
+        sourceCapture.classList.remove('active');
+        uploadSection.style.display = 'block';
+        cameraSection.style.display = 'none';
+        stopProfileCamera();
+    } else {
+        sourceCapture.classList.add('active');
+        sourceUpload.classList.remove('active');
+        uploadSection.style.display = 'none';
+        cameraSection.style.display = 'block';
+        startProfileCamera();
+    }
+}
+
+async function startProfileCamera() {
+    const video = document.getElementById('profCameraStream');
+    const captureBtn = document.getElementById('profCapturePhoto');
+    const startBtn = document.getElementById('profStartCamera');
+    const canvas = document.getElementById('profPhotoCanvas');
 
     try {
+        profileStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: profFacingMode } 
+        });
+        video.srcObject = profileStream;
+        video.style.display = 'block';
+        canvas.style.display = 'none';
+        
+        const switchBtn = document.getElementById('profSwitchCamera');
+        startBtn.style.display = 'none';
+        captureBtn.style.display = 'inline-block';
+        if (switchBtn) switchBtn.style.display = 'inline-block';
+    } catch (err) {
+        console.error("Profile camera access denied:", err);
+        showToast("Camera access denied or unavailable", "danger");
+    }
+}
+
+function stopProfileCamera() {
+    if (profileStream) {
+        profileStream.getTracks().forEach(track => track.stop());
+        profileStream = null;
+    }
+    const video = document.getElementById('profCameraStream');
+    const captureBtn = document.getElementById('profCapturePhoto');
+    const startBtn = document.getElementById('profStartCamera');
+    const switchBtn = document.getElementById('profSwitchCamera');
+    if (video) video.style.display = 'none';
+    if (captureBtn) captureBtn.style.display = 'none';
+    if (switchBtn) switchBtn.style.display = 'none';
+    if (startBtn) startBtn.style.display = 'inline-block';
+}
+
+function captureProfilePhoto() {
+    const video = document.getElementById('profCameraStream');
+    const canvas = document.getElementById('profPhotoCanvas');
+    const captureBtn = document.getElementById('profCapturePhoto');
+
+    const switchBtn = document.getElementById('profSwitchCamera');
+
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+
+    video.style.display = 'none';
+    canvas.style.display = 'block';
+    captureBtn.style.display = 'none';
+    if (switchBtn) switchBtn.style.display = 'none';
+    stopProfileCamera();
+
+    canvas.toBlob(blob => {
+        uploadProfilePhotoData(blob, `profile_capture_${Date.now()}.jpg`);
+    }, 'image/jpeg');
+}
+
+function toggleProfileCamera() {
+    profFacingMode = profFacingMode === 'user' ? 'environment' : 'user';
+    startProfileCamera();
+}
+
+// =======================
+// Resolution Camera & Video Logic
+// =======================
+
+function switchResolveMediaSource(type) {
+    const sourceUpload = document.getElementById('resSourceUpload');
+    const sourceCapture = document.getElementById('resSourceCapture');
+    const uploadSection = document.getElementById('resUploadSection');
+    const cameraSection = document.getElementById('resCameraSection');
+
+    if (!sourceUpload) return;
+
+    if (type === 'upload') {
+        sourceUpload.classList.add('active');
+        sourceCapture.classList.remove('active');
+        uploadSection.style.display = 'block';
+        cameraSection.style.display = 'none';
+        stopResolveCamera();
+    } else {
+        sourceCapture.classList.add('active');
+        sourceUpload.classList.remove('active');
+        uploadSection.style.display = 'none';
+        cameraSection.style.display = 'block';
+        startResolveCamera();
+    }
+}
+
+async function startResolveCamera() {
+    const video = document.getElementById('resCameraStream');
+    const captureBtn = document.getElementById('resCapturePhoto');
+    const startVideoBtn = document.getElementById('resStartVideo');
+    const stopVideoBtn = document.getElementById('resStopVideo');
+    const startBtn = document.getElementById('resStartCamera');
+    const switchBtn = document.getElementById('resSwitchCamera');
+    const canvas = document.getElementById('resPhotoCanvas');
+    const preview = document.getElementById('resFilePreview');
+
+    try {
+        if (resolveMediaStream) resolveMediaStream.getTracks().forEach(t => t.stop());
+        
+        resolveMediaStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: resolveFacingMode },
+            audio: true // Audio needed for video recording
+        });
+        
+        video.srcObject = resolveMediaStream;
+        video.style.display = 'block';
+        if(canvas) canvas.style.display = 'none';
+        if(preview) preview.innerHTML = '';
+        resolveCapturedBlob = null;
+        
+        startBtn.style.display = 'none';
+        captureBtn.style.display = 'inline-block';
+        startVideoBtn.style.display = 'inline-block';
+        stopVideoBtn.style.display = 'none';
+        if (switchBtn) switchBtn.style.display = 'inline-block';
+    } catch (err) {
+        console.error("Resolution camera access denied:", err);
+        showToast("Camera access denied or unavailable", "danger");
+    }
+}
+
+function stopResolveCamera() {
+    if (resolveMediaStream) {
+        resolveMediaStream.getTracks().forEach(track => track.stop());
+        resolveMediaStream = null;
+    }
+    const video = document.getElementById('resCameraStream');
+    const captureBtn = document.getElementById('resCapturePhoto');
+    const startVideoBtn = document.getElementById('resStartVideo');
+    const stopVideoBtn = document.getElementById('resStopVideo');
+    const startBtn = document.getElementById('resStartCamera');
+    const switchBtn = document.getElementById('resSwitchCamera');
+    
+    if (video) video.style.display = 'none';
+    if (captureBtn) captureBtn.style.display = 'none';
+    if (startVideoBtn) startVideoBtn.style.display = 'none';
+    if (stopVideoBtn) stopVideoBtn.style.display = 'none';
+    if (switchBtn) switchBtn.style.display = 'none';
+    if (startBtn) startBtn.style.display = 'inline-block';
+}
+
+function captureResolvePhoto() {
+    const video = document.getElementById('resCameraStream');
+    const canvas = document.getElementById('resPhotoCanvas');
+    const preview = document.getElementById('resFilePreview');
+    if (!video || !canvas) return;
+
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+
+    canvas.toBlob(blob => {
+        resolveCapturedBlob = blob;
+        preview.innerHTML = `<img src="${URL.createObjectURL(blob)}" style="max-width:100%; max-height:150px; border-radius:8px;"> <p style="font-size:0.8rem; color:#64748b; margin-top:0.3rem;">Captured Photo</p>`;
+    }, 'image/jpeg');
+
+    stopResolveCamera();
+}
+
+function startResolveVideoRecording() {
+    if (!resolveMediaStream) return;
+    
+    resolveRecordedChunks = [];
+    resolveMediaRecorder = new MediaRecorder(resolveMediaStream, { mimeType: 'video/webm' });
+
+    resolveMediaRecorder.ondataavailable = function(event) {
+        if (event.data.size > 0) {
+            resolveRecordedChunks.push(event.data);
+        }
+    };
+
+    resolveMediaRecorder.onstop = function() {
+        resolveCapturedBlob = new Blob(resolveRecordedChunks, { type: 'video/webm' });
+        const preview = document.getElementById('resFilePreview');
+        preview.innerHTML = `<video src="${URL.createObjectURL(resolveCapturedBlob)}" controls style="max-width:100%; max-height:150px; border-radius:8px;"></video> <p style="font-size:0.8rem; color:#64748b; margin-top:0.3rem;">Captured Video</p>`;
+        stopResolveCamera();
+    };
+
+    resolveMediaRecorder.start();
+    
+    document.getElementById('resStartVideo').style.display = 'none';
+    document.getElementById('resCapturePhoto').style.display = 'none';
+    document.getElementById('resStopVideo').style.display = 'inline-block';
+    showToast('Recording started...', 'info');
+}
+
+function stopResolveVideoRecording() {
+    if (resolveMediaRecorder && resolveMediaRecorder.state !== 'inactive') {
+        resolveMediaRecorder.stop();
+        showToast('Recording stopped', 'success');
+    }
+}
+
+function toggleResolveCamera() {
+    resolveFacingMode = resolveFacingMode === 'user' ? 'environment' : 'user';
+    startResolveCamera();
+}
+
+function handleProfileFileUpload(input) {
+    if (input.files && input.files[0]) {
+        uploadProfilePhotoData(input.files[0], input.files[0].name);
+    }
+}
+
+async function uploadProfilePhotoData(fileOrBlob, filename) {
+    const formData = new FormData();
+    // Reconstruct as a File object if it's a blob so it gets uploaded properly
+    formData.append('profilePhoto', new File([fileOrBlob], filename, { type: fileOrBlob.type || 'image/jpeg' }));
+
+    try {
+        showToast('Uploading photo...', 'info');
         const response = await fetch(`${API_BASE}/auth/update-profile-photo`, {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${token}` },
@@ -1069,10 +1489,14 @@ async function uploadProfilePhoto(input) {
         });
         const data = await response.json();
         if (data.success) {
-            document.getElementById('profileImg').src = data.profilePhoto;
+            const profileImg = document.getElementById('profileImg');
+            if(profileImg) profileImg.src = data.profilePhoto;
             currentUser.profilePhoto = data.profilePhoto;
             localStorage.setItem('user', JSON.stringify(currentUser));
             showToast('Profile photo updated!', 'success');
+            setTimeout(() => closeProfilePhotoModal(), 1000);
+        } else {
+            showToast(data.message || 'Photo upload failed', 'danger');
         }
     } catch (error) {
         showToast('Photo upload failed', 'danger');
@@ -1316,3 +1740,325 @@ async function deleteAccount() {
         }
     }
 }
+
+// ========================================
+// 9. NOTIFICATION CENTER
+// ========================================
+async function loadNotifications() {
+    try {
+        const res = await fetch(`${API_BASE}/notifications`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        const badge = document.getElementById('notifBadge');
+        const list = document.getElementById('notifList');
+        if (badge) {
+            badge.textContent = data.unreadCount || '';
+            badge.style.display = data.unreadCount > 0 ? 'flex' : 'none';
+        }
+        if (list) {
+            list.innerHTML = data.notifications.length === 0 
+                ? '<p style="padding:1rem;color:#94a3b8;text-align:center;">No notifications</p>'
+                : data.notifications.map(n => `
+                    <div class="notif-item ${n.isRead ? 'read' : 'unread'}" onclick="markNotifRead('${n.id}')">
+                        <div class="notif-icon"><i class="fa-solid ${n.type === 'resolution' ? 'fa-check-circle' : n.type === 'escalation' ? 'fa-triangle-exclamation' : 'fa-bell'}"></i></div>
+                        <div class="notif-body">
+                            <strong>${n.title}</strong>
+                            <p>${n.message}</p>
+                            <small>${new Date(n.createdAt).toLocaleString()}</small>
+                        </div>
+                    </div>
+                `).join('');
+        }
+    } catch (e) { console.log('Notification load error:', e); }
+}
+
+function toggleNotifPanel() {
+    const panel = document.getElementById('notifPanel');
+    if (panel) panel.classList.toggle('active');
+}
+
+async function markNotifRead(id) {
+    try {
+        await fetch(`${API_BASE}/notifications/${id}/read`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        loadNotifications();
+    } catch (e) {}
+}
+
+async function markAllNotifRead() {
+    try {
+        await fetch(`${API_BASE}/notifications/read-all`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        loadNotifications();
+    } catch (e) {}
+}
+
+// ========================================
+// 10. COMPLAINT TIMELINE
+// ========================================
+async function loadTimeline(complaintId) {
+    const container = document.getElementById('timelineContainer');
+    if (!container) return;
+    try {
+        const res = await fetch(`${API_BASE}/complaints/${complaintId}/timeline`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const timeline = await res.json();
+        container.innerHTML = timeline.length === 0 
+            ? '<p style="color:#94a3b8;">No timeline data yet.</p>'
+            : timeline.map(t => `
+                <div class="timeline-item">
+                    <div class="timeline-dot ${t.action === 'CREATED' ? 'dot-blue' : t.action === 'RESOLVED' ? 'dot-green' : 'dot-orange'}"></div>
+                    <div class="timeline-content">
+                        <strong>${t.action}</strong>
+                        <p>${t.description || ''}</p>
+                        <small>${new Date(t.createdAt).toLocaleString()}${t.User ? ' by ' + t.User.name : ''}</small>
+                    </div>
+                </div>
+            `).join('');
+    } catch (e) { container.innerHTML = '<p style="color:#ef4444;">Failed to load timeline</p>'; }
+}
+
+// ========================================
+// 11. AI DUPLICATE CHECK
+// ========================================
+async function checkForDuplicates() {
+    const title = document.getElementById('compTitle')?.value;
+    const desc = document.getElementById('compDesc')?.value;
+    if (!title || title.length < 5) return;
+    
+    try {
+        const res = await fetch(`${API_BASE}/complaints/check-duplicate`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, description: desc || '' })
+        });
+        const data = await res.json();
+        const warn = document.getElementById('duplicateWarning');
+        if (warn && data.isDuplicate) {
+            warn.style.display = 'block';
+            warn.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Similar complaint found: <strong>"${data.matches[0].title}"</strong> (${data.matches[0].similarity}% match). You may still submit.`;
+        } else if (warn) {
+            warn.style.display = 'none';
+        }
+    } catch (e) {}
+}
+
+// ========================================
+// 12. AI SUMMARIZE
+// ========================================
+async function summarizeComplaint(id) {
+    try {
+        const res = await fetch(`${API_BASE}/complaints/${id}/summarize`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        const el = document.getElementById('aiSummary');
+        if (el) {
+            el.style.display = 'block';
+            el.innerHTML = `<i class="fa-solid fa-robot"></i> <strong>AI Summary:</strong> ${data.summary}`;
+        }
+    } catch (e) { showToast('Summarization failed', 'danger'); }
+}
+
+// ========================================
+// 13. SIMILAR COMPLAINTS
+// ========================================
+async function loadSimilarComplaints(id) {
+    const container = document.getElementById('similarComplaints');
+    if (!container) return;
+    try {
+        const res = await fetch(`${API_BASE}/complaints/${id}/similar`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const similar = await res.json();
+        container.innerHTML = similar.length === 0 
+            ? '<p style="color:#94a3b8;">No similar complaints found.</p>'
+            : similar.map(s => `
+                <div class="similar-item" style="padding:0.5rem;border-bottom:1px solid var(--border);cursor:pointer;">
+                    <strong>${s.title}</strong> <span class="badge badge-low">${s.similarity}% match</span>
+                    <p style="font-size:0.8rem;color:#64748b;">${s.category} · ${s.status}</p>
+                </div>
+            `).join('');
+    } catch (e) { container.innerHTML = '<p style="color:#ef4444;">Failed to load</p>'; }
+}
+
+// ========================================
+// 14. QR CODE GENERATOR (Admin)
+// ========================================
+async function generateQRCode() {
+    const location = document.getElementById('qrLocation')?.value;
+    const room = document.getElementById('qrRoom')?.value;
+    if (!location) return showToast('Select a location', 'danger');
+    
+    try {
+        const res = await fetch(`${API_BASE}/complaints/qr-generate?location=${encodeURIComponent(location)}&room=${encodeURIComponent(room || '')}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        const preview = document.getElementById('qrPreview');
+        if (preview) {
+            preview.innerHTML = `<img src="${data.qrCode}" alt="QR Code" style="max-width:250px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.15);"/><p style="margin-top:0.5rem;font-size:0.8rem;color:#64748b;">Scan to raise complaint at ${location} ${room || ''}</p>
+            <a href="${data.qrCode}" download="qr-${location}-${room || 'general'}.png" class="btn btn-outline btn-sm" style="margin-top:0.5rem;"><i class="fa-solid fa-download"></i> Download</a>`;
+        }
+    } catch (e) { showToast('QR generation failed', 'danger'); }
+}
+
+// ========================================
+// 15. KNOWLEDGE BASE
+// ========================================
+async function searchKnowledgeBase() {
+    const q = document.getElementById('kbSearch')?.value || '';
+    const cat = document.getElementById('kbCategory')?.value || '';
+    const list = document.getElementById('kbResults');
+    if (!list) return;
+    
+    try {
+        const res = await fetch(`${API_BASE}/complaints/knowledge-base?q=${encodeURIComponent(q)}&category=${encodeURIComponent(cat)}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const results = await res.json();
+        list.innerHTML = results.length === 0 
+            ? '<p style="text-align:center;color:#94a3b8;padding:2rem;">No results found</p>'
+            : results.map(r => `
+                <div class="kb-card glass-panel" style="padding:1rem;margin-bottom:0.75rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <strong>${r.title}</strong>
+                        <span class="badge badge-low">${r.category}</span>
+                    </div>
+                    <p style="font-size:0.85rem;color:#64748b;margin:0.5rem 0;">${r.description?.substring(0, 120)}...</p>
+                    <div style="background:var(--bg-secondary);padding:0.75rem;border-radius:8px;margin-top:0.5rem;">
+                        <strong style="color:#059669;"><i class="fa-solid fa-check-circle"></i> Resolution:</strong>
+                        <p style="margin:0.3rem 0 0;font-size:0.85rem;">${r.resolutionSummary || 'N/A'}</p>
+                    </div>
+                </div>
+            `).join('');
+    } catch (e) { list.innerHTML = '<p style="color:#ef4444;">Error loading knowledge base</p>'; }
+}
+
+async function loadFAQ() {
+    const container = document.getElementById('faqContainer');
+    if (!container) return;
+    try {
+        const res = await fetch(`${API_BASE}/complaints/knowledge-base/faq`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const faq = await res.json();
+        container.innerHTML = faq.map(cat => `
+            <div class="faq-category" style="margin-bottom:1rem;">
+                <h4 style="color:var(--primary);margin-bottom:0.5rem;"><i class="fa-solid fa-tag"></i> ${cat.category}</h4>
+                ${cat.items.map(item => `
+                    <details class="faq-item glass-panel" style="padding:0.75rem;margin-bottom:0.5rem;border-radius:8px;">
+                        <summary style="cursor:pointer;font-weight:600;">${item.question}</summary>
+                        <p style="margin-top:0.5rem;color:#64748b;font-size:0.9rem;">${item.answer}</p>
+                    </details>
+                `).join('')}
+            </div>
+        `).join('');
+    } catch (e) {}
+}
+
+// ========================================
+// 16. ANALYTICS: DEPARTMENT PERFORMANCE
+// ========================================
+async function loadDeptPerformance() {
+    const container = document.getElementById('deptPerformanceTable');
+    if (!container) return;
+    try {
+        const res = await fetch(`${API_BASE}/complaints/analytics/department-performance`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        container.innerHTML = data.map((d, i) => `
+            <tr>
+                <td><strong>#${i + 1}</strong></td>
+                <td>${d.department}</td>
+                <td>${d.total}</td>
+                <td>${d.resolved}</td>
+                <td>${d.resolutionRate}%</td>
+                <td>${d.avgResolutionHours}h</td>
+                <td><div class="score-bar"><div class="score-fill" style="width:${d.performanceScore}%;background:${d.performanceScore > 70 ? '#059669' : d.performanceScore > 40 ? '#f59e0b' : '#ef4444'};"></div><span>${d.performanceScore}</span></div></td>
+            </tr>
+        `).join('');
+    } catch (e) {}
+}
+
+// ========================================
+// 17. ANALYTICS: HOSTEL TRACKING
+// ========================================
+async function loadHostelTracking() {
+    const container = document.getElementById('hostelGrid');
+    if (!container) return;
+    try {
+        const res = await fetch(`${API_BASE}/complaints/analytics/hostel-tracking`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const rooms = await res.json();
+        container.innerHTML = rooms.map(r => {
+            const severity = r.activeComplaints > 3 ? 'high' : r.activeComplaints > 1 ? 'med' : 'low';
+            return `<div class="hostel-room-card severity-${severity}">
+                <strong>${r.room}</strong>
+                <p>${r.totalComplaints} total · <span style="color:${severity === 'high' ? '#ef4444' : '#f59e0b'};">${r.activeComplaints} active</span></p>
+            </div>`;
+        }).join('');
+    } catch (e) {}
+}
+
+// ========================================
+// 18. ANALYTICS: AI RECOMMENDATIONS
+// ========================================
+async function loadRecommendations() {
+    const container = document.getElementById('recommendationsList');
+    if (!container) return;
+    try {
+        const res = await fetch(`${API_BASE}/complaints/analytics/recommendations`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const recs = await res.json();
+        container.innerHTML = recs.length === 0 
+            ? '<p style="color:#94a3b8;">No recommendations available yet.</p>'
+            : recs.map(r => `
+                <div class="recommendation-card glass-panel" style="padding:0.75rem;margin-bottom:0.5rem;border-left:3px solid var(--primary);">
+                    <div style="display:flex;justify-content:space-between;">
+                        <strong><i class="fa-solid fa-lightbulb" style="color:#f59e0b;"></i> ${r.category}</strong>
+                        <span class="badge badge-low">${r.count} complaints</span>
+                    </div>
+                    <p style="font-size:0.85rem;color:#64748b;margin-top:0.3rem;">${r.recommendation}</p>
+                </div>
+            `).join('');
+    } catch (e) {}
+}
+
+// ========================================
+// 19. QR SCAN AUTO-FILL
+// ========================================
+function handleQRAutoFill() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('qr') === 'true') {
+        const location = params.get('location');
+        const room = params.get('room');
+        setTimeout(() => {
+            const locSelect = document.getElementById('compLocation');
+            const roomInput = document.getElementById('compRoom');
+            if (locSelect && location) locSelect.value = location;
+            if (roomInput && room) roomInput.value = decodeURIComponent(room);
+            const modal = document.getElementById('complaintModal');
+            if (modal) modal.classList.add('active');
+            showToast('QR scanned! Location auto-filled.', 'success');
+        }, 500);
+    }
+}
+
+// Auto-call on page load
+if (window.location.pathname.includes('student.html')) {
+    document.addEventListener('DOMContentLoaded', handleQRAutoFill);
+}
+
+// Load notifications periodically
+setInterval(() => { if (token) loadNotifications(); }, 30000);

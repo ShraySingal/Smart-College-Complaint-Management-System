@@ -1,12 +1,12 @@
-const { Complaint, User, Feedback, Message } = require('../models/index');
-const { getPriority } = require('../utils/priorityLogic');
+const { Complaint, User, Feedback, Message, ComplaintTimeline, Notification } = require('../models/index');
 const { sendEmail, sendResolutionEmail, sendComplaintAcknowledgeEmail, sendAdminNotificationEmail } = require('../config/mailer');
 const { sequelize } = require('../config/db');
 const redisClient = require('../config/redis');
 const { Op } = require('sequelize');
 const logger = require('../config/logger');
 const { suggestCategory } = require('../utils/aiTagger');
-const { sendSMS } = require('../utils/smsService');
+const { createNotification } = require('../controllers/notificationController');
+const { analyzeSentiment, checkDuplicate, predictPriority, summarizeText, findSimilar } = require('../utils/aiEngine');
 
 const raiseComplaint = async (req, res) => {
     logger.info(`Incoming Complaint Submission: User ${req.user?.id} (${req.user?.email})`);
@@ -14,15 +14,20 @@ const raiseComplaint = async (req, res) => {
         const { title, description, category, room, location, latitude, longitude } = req.body;
         logger.info(`Data: title=${title}, category=${category}, location=${location}, hasFile=${!!req.file}`);
 
+        const isAnonymous = req.body.isAnonymous === 'true' || req.body.isAnonymous === true;
+
         let attachmentUrl = null;
         if (req.file) {
-            // Check if Cloudinary (path is URL) or DiskStorage (path is local filename)
-            attachmentUrl = req.file.path.startsWith('http') ? req.file.path : `/uploads/${req.file.filename}`;
+            attachmentUrl = `/uploads/${req.file.filename}`;
         } else {
             return res.status(400).json({ message: 'An image or video attachment is required' });
         }
         
-        const priority = getPriority(category);
+        // AI: Sentiment Analysis
+        const sentiment = analyzeSentiment(description);
+        
+        // AI: Multi-Factor Priority Prediction
+        const { priority, priorityScore } = predictPriority(category, description, sentiment.score, sentiment.label);
 
         let deadlineHours = 72;
         if (priority === 'High') deadlineHours = 24;
@@ -35,8 +40,14 @@ const raiseComplaint = async (req, res) => {
             description,
             category,
             priority,
+            priorityScore,
+            sentimentScore: sentiment.score,
+            sentimentLabel: sentiment.label,
+            isAnonymous,
             location,
             room,
+            latitude: latitude || null,
+            longitude: longitude || null,
             attachment: attachmentUrl,
             deadline
         });
@@ -47,6 +58,14 @@ const raiseComplaint = async (req, res) => {
         } catch (redisErr) {
             logger.warn("Redis Cache Invalidation failed (Lite Mode Active)");
         }
+
+        // Record timeline event
+        await ComplaintTimeline.create({
+            complaintId: complaint.id,
+            action: 'CREATED',
+            description: `Complaint raised with ${priority} priority in ${location}`,
+            performedBy: req.user.id
+        });
 
         req.app.get('io').emit('admin_notification', {
             type: 'NEW_COMPLAINT',
@@ -89,17 +108,6 @@ const getMyComplaints = async (req, res) => {
         const { search, status, category } = req.query;
         logger.info(`🔍 Fetching complaints for User: ${req.user.id} | Filters: search=${search}, status=${status}, category=${category}`);
         const cacheKey = `complaints:user:${req.user.id}:${search}:${status}:${category}`;
-        /*
-        let cachedData = null;
-        try {
-            cachedData = await redisClient.get(cacheKey);
-        } catch (redisErr) {
-            logger.warn("Redis Fetch Error (Lite Mode Active):", redisErr.message);
-        }
-        
-        if (cachedData) return res.status(200).json(JSON.parse(cachedData));
-        */
-
         const whereClause = { studentId: req.user.id };
         if (search && search.trim() !== "") whereClause.title = { [Op.iLike]: `%${search}%` };
         if (status && status.trim() !== "") whereClause.status = status;
@@ -112,13 +120,6 @@ const getMyComplaints = async (req, res) => {
         });
         logger.info(`✅ Found ${complaints.length} complaints for user ${req.user.id}`);
 
-        /* 
-        try {
-            await redisClient.setEx(cacheKey, 60, JSON.stringify(complaints));
-        } catch (redisErr) {
-            // Silent fail for setEx
-        }
-        */
         res.status(200).json(complaints);
     } catch (error) {
         logger.error('Error fetching my complaints:', error);
@@ -215,17 +216,31 @@ const resolveComplaint = async (req, res) => {
             logger.warn("Redis Resolve Cache Invalidation failed");
         }
 
+        // Record timeline event
+        await ComplaintTimeline.create({
+            complaintId: complaint.id,
+            action: 'RESOLVED',
+            description: `Resolved: ${resolutionSummary || 'Resolved by admin'}`,
+            performedBy: req.user.id
+        });
+
         req.app.get('io').to(complaint.User.id).emit('user_notification', {
             type: 'COMPLAINT_RESOLVED',
             message: `Your complaint "${complaint.title}" has been resolved!`,
             complaintId: complaint.id
         });
 
+        // In-app notification (replaces Twilio SMS)
+        await createNotification(
+            complaint.User.id,
+            'Complaint Resolved',
+            `Your complaint "${complaint.title}" has been resolved.`,
+            'resolution',
+            complaint.id
+        );
+
         if (complaint.User && complaint.User.email) {
             await sendResolutionEmail(complaint.User, complaint);
-            if (complaint.priority === 'High') {
-                await sendSMS('+1234567890', `Urgent: Your complaint "${complaint.title}" has been resolved.`);
-            }
         }
 
         res.status(200).json({ success: true, message: 'Complaint resolved', complaint });
@@ -302,14 +317,38 @@ const reopenComplaint = async (req, res) => {
         complaint.resolutionSummary = null;
         await complaint.save();
 
-        const keys = await redisClient.keys('complaints:*');
-        if (keys.length > 0) await redisClient.del(keys);
+        // Record timeline event
+        await ComplaintTimeline.create({
+            complaintId: complaint.id,
+            action: 'REOPENED',
+            description: `Complaint reopened by ${complaint.User.name}`,
+            performedBy: req.user.id
+        });
+
+        try {
+            const keys = await redisClient.keys('complaints:*');
+            if (keys.length > 0) await redisClient.del(keys);
+        } catch (redisErr) {
+            logger.warn('Redis cache clear failed');
+        }
 
         req.app.get('io').emit('admin_notification', {
             type: 'COMPLAINT_REOPENED',
             message: `User ${complaint.User.name} reopened complaint: ${complaint.title}`,
             complaintId: complaint.id
         });
+
+        // Notify all admins
+        const admins = await User.findAll({ where: { role: 'admin' } });
+        for (const admin of admins) {
+            await createNotification(
+                admin.id,
+                'Complaint Reopened',
+                `${complaint.User.name} reopened: "${complaint.title}"`,
+                'complaint_update',
+                complaint.id
+            );
+        }
 
         res.status(200).json({ success: true, message: 'Complaint reopened' });
     } catch (error) {
@@ -332,6 +371,7 @@ const getStats = async (req, res) => {
     try {
         const total = await Complaint.count();
         const pending = await Complaint.count({ where: { status: 'Pending' } });
+        const inProgress = await Complaint.count({ where: { status: 'In Progress' } });
         const resolved = await Complaint.count({ where: { status: 'Resolved' } });
         const overdue = await Complaint.count({ 
             where: { 
@@ -340,8 +380,22 @@ const getStats = async (req, res) => {
             } 
         });
 
-        res.status(200).json({ total, pending, resolved, overdue });
+        // Group by Category
+        const categoryCounts = await Complaint.findAll({
+            attributes: ['category', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
+            group: ['category']
+        });
+
+        const categoryData = categoryCounts.map(c => ({
+            category: c.category,
+            count: parseInt(c.get('count'), 10)
+        }));
+
+        res.status(200).json({ 
+            total, pending, inProgress, resolved, overdue, categoryData 
+        });
     } catch (error) {
+        logger.error('Stats error:', error);
         res.status(500).json({ message: 'Stats error' });
     }
 };
@@ -398,6 +452,264 @@ const enhanceDescription = async (req, res) => {
     }
 };
 
+const getTimeline = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const timeline = await ComplaintTimeline.findAll({
+            where: { complaintId: id },
+            include: [{ model: User, attributes: ['name', 'role'], foreignKey: 'performedBy' }],
+            order: [['createdAt', 'ASC']]
+        });
+        res.status(200).json(timeline);
+    } catch (error) {
+        logger.error('Timeline error:', error);
+        res.status(500).json({ message: 'Error fetching timeline' });
+    }
+};
+
+// ========== AI: Summarize Complaint ==========
+const summarizeComplaint = async (req, res) => {
+    try {
+        const complaint = await Complaint.findByPk(req.params.id);
+        if (!complaint) return res.status(404).json({ message: 'Not found' });
+        const summary = summarizeText(complaint.description);
+        res.status(200).json({ summary });
+    } catch (error) {
+        logger.error('Summarize error:', error);
+        res.status(500).json({ message: 'Summarization error' });
+    }
+};
+
+// ========== AI: Find Similar Complaints ==========
+const getSimilarComplaints = async (req, res) => {
+    try {
+        const complaint = await Complaint.findByPk(req.params.id);
+        if (!complaint) return res.status(404).json({ message: 'Not found' });
+        const all = await Complaint.findAll({ where: { id: { [Op.ne]: complaint.id } }, limit: 100, order: [['createdAt', 'DESC']] });
+        const similar = findSimilar(complaint, all);
+        res.status(200).json(similar);
+    } catch (error) {
+        logger.error('Similar error:', error);
+        res.status(500).json({ message: 'Similarity search error' });
+    }
+};
+
+// ========== AI: Check Duplicate Before Submit ==========
+const checkDuplicateComplaint = async (req, res) => {
+    try {
+        const { title, description } = req.body;
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const recent = await Complaint.findAll({
+            where: { status: { [Op.ne]: 'Resolved' }, createdAt: { [Op.gte]: thirtyDaysAgo } },
+            attributes: ['id', 'title', 'description', 'status'],
+            limit: 50
+        });
+        const result = checkDuplicate(title, description, recent);
+        res.status(200).json(result);
+    } catch (error) {
+        logger.error('Duplicate check error:', error);
+        res.status(500).json({ message: 'Duplicate check error' });
+    }
+};
+
+// ========== QR Code Generation ==========
+const generateQR = async (req, res) => {
+    try {
+        const QRCode = require('qrcode');
+        const { location, room } = req.query;
+        const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5000';
+        const url = `${baseUrl}/student.html?qr=true&location=${encodeURIComponent(location || '')}&room=${encodeURIComponent(room || '')}`;
+        const qrDataUrl = await QRCode.toDataURL(url, { width: 400, margin: 2 });
+        res.status(200).json({ qrCode: qrDataUrl, url });
+    } catch (error) {
+        logger.error('QR generation error:', error);
+        res.status(500).json({ message: 'QR generation error' });
+    }
+};
+
+// ========== Knowledge Base: Search Resolved Complaints ==========
+const searchKnowledgeBase = async (req, res) => {
+    try {
+        const { q, category } = req.query;
+        const where = { status: 'Resolved' };
+        if (category) where.category = category;
+        if (q) {
+            where[Op.or] = [
+                { title: { [Op.iLike]: `%${q}%` } },
+                { description: { [Op.iLike]: `%${q}%` } },
+                { resolutionSummary: { [Op.iLike]: `%${q}%` } }
+            ];
+        }
+        const results = await Complaint.findAll({
+            where,
+            attributes: ['id', 'title', 'category', 'description', 'resolutionSummary', 'location', 'room', 'createdAt'],
+            order: [['createdAt', 'DESC']],
+            limit: 20
+        });
+        res.status(200).json(results);
+    } catch (error) {
+        logger.error('Knowledge base error:', error);
+        res.status(500).json({ message: 'Knowledge base error' });
+    }
+};
+
+// ========== Auto FAQ from Resolved Complaints ==========
+const getAutoFAQ = async (req, res) => {
+    try {
+        const categories = ['Electricity', 'Water', 'Internet', 'Furniture', 'Hygiene', 'Other'];
+        const faq = [];
+        for (const cat of categories) {
+            const resolved = await Complaint.findAll({
+                where: { category: cat, status: 'Resolved', resolutionSummary: { [Op.ne]: null } },
+                attributes: ['title', 'resolutionSummary'],
+                order: [['createdAt', 'DESC']],
+                limit: 3
+            });
+            if (resolved.length > 0) {
+                faq.push({
+                    category: cat,
+                    items: resolved.map(c => ({ question: c.title, answer: c.resolutionSummary }))
+                });
+            }
+        }
+        res.status(200).json(faq);
+    } catch (error) {
+        logger.error('FAQ error:', error);
+        res.status(500).json({ message: 'FAQ generation error' });
+    }
+};
+
+// ========== Analytics: Department Performance ==========
+const getDepartmentPerformance = async (req, res) => {
+    try {
+        const departments = await Complaint.findAll({
+            attributes: [
+                'category',
+                [sequelize.fn('COUNT', sequelize.col('Complaint.id')), 'total'],
+                [sequelize.fn('COUNT', sequelize.literal("CASE WHEN \"Complaint\".\"status\" = 'Resolved' THEN 1 END")), 'resolved'],
+                [sequelize.fn('AVG', sequelize.literal("CASE WHEN \"Complaint\".\"status\" = 'Resolved' THEN EXTRACT(EPOCH FROM (\"Complaint\".\"updatedAt\" - \"Complaint\".\"createdAt\")) / 3600 END")), 'avgResolutionHours']
+            ],
+            group: ['category'],
+            raw: true
+        });
+        
+        const performance = departments.map(d => {
+            const resolutionRate = d.total > 0 ? (d.resolved / d.total * 100) : 0;
+            const score = Math.round(resolutionRate * 0.6 + Math.max(0, 100 - (d.avgResolutionHours || 0)) * 0.4);
+            return {
+                department: d.category,
+                total: parseInt(d.total),
+                resolved: parseInt(d.resolved),
+                resolutionRate: parseFloat(resolutionRate.toFixed(1)),
+                avgResolutionHours: parseFloat((d.avgResolutionHours || 0).toFixed(1)),
+                performanceScore: Math.min(100, Math.max(0, score))
+            };
+        });
+        
+        performance.sort((a, b) => b.performanceScore - a.performanceScore);
+        res.status(200).json(performance);
+    } catch (error) {
+        logger.error('Dept performance error:', error);
+        res.status(500).json({ message: 'Performance analytics error' });
+    }
+};
+
+// ========== Analytics: Heatmap Data ==========
+const getHeatmapData = async (req, res) => {
+    try {
+        const data = await Complaint.findAll({
+            attributes: [
+                'location', 'room',
+                [sequelize.fn('COUNT', sequelize.col('id')), 'count'],
+                [sequelize.fn('COUNT', sequelize.literal("CASE WHEN status != 'Resolved' THEN 1 END")), 'active']
+            ],
+            group: ['location', 'room'],
+            raw: true
+        });
+        res.status(200).json(data);
+    } catch (error) {
+        logger.error('Heatmap error:', error);
+        res.status(500).json({ message: 'Heatmap data error' });
+    }
+};
+
+// ========== Analytics: Trend Prediction ==========
+const getTrends = async (req, res) => {
+    try {
+        const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+        const trends = await Complaint.findAll({
+            attributes: [
+                [sequelize.fn('DATE_TRUNC', 'week', sequelize.col('createdAt')), 'week'],
+                'category',
+                [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+            ],
+            where: { createdAt: { [Op.gte]: ninetyDaysAgo } },
+            group: [sequelize.fn('DATE_TRUNC', 'week', sequelize.col('createdAt')), 'category'],
+            order: [[sequelize.fn('DATE_TRUNC', 'week', sequelize.col('createdAt')), 'ASC']],
+            raw: true
+        });
+        res.status(200).json(trends);
+    } catch (error) {
+        logger.error('Trends error:', error);
+        res.status(500).json({ message: 'Trends error' });
+    }
+};
+
+// ========== Analytics: Hostel Room Tracking ==========
+const getHostelTracking = async (req, res) => {
+    try {
+        const { hostel } = req.query;
+        const where = { location: 'Hostel' };
+        if (hostel) where.room = { [Op.iLike]: `%${hostel}%` };
+        
+        const rooms = await Complaint.findAll({
+            attributes: [
+                'room',
+                [sequelize.fn('COUNT', sequelize.col('id')), 'totalComplaints'],
+                [sequelize.fn('COUNT', sequelize.literal("CASE WHEN status != 'Resolved' THEN 1 END")), 'activeComplaints']
+            ],
+            where,
+            group: ['room'],
+            order: [[sequelize.fn('COUNT', sequelize.col('id')), 'DESC']],
+            raw: true
+        });
+        res.status(200).json(rooms);
+    } catch (error) {
+        logger.error('Hostel tracking error:', error);
+        res.status(500).json({ message: 'Hostel tracking error' });
+    }
+};
+
+// ========== AI: Smart Recommendations ==========
+const getRecommendations = async (req, res) => {
+    try {
+        // Find most common category+location combos
+        const hotspots = await Complaint.findAll({
+            attributes: [
+                'category', 'location', 'room',
+                [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+            ],
+            where: { createdAt: { [Op.gte]: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+            group: ['category', 'location', 'room'],
+            order: [[sequelize.fn('COUNT', sequelize.col('id')), 'DESC']],
+            limit: 10,
+            raw: true
+        });
+        
+        const recommendations = hotspots.map(h => ({
+            category: h.category,
+            location: `${h.location} - ${h.room}`,
+            count: parseInt(h.count),
+            recommendation: `Schedule preventive ${h.category.toLowerCase()} maintenance at ${h.location} ${h.room} — ${h.count} complaints in the last 30 days.`
+        }));
+        
+        res.status(200).json(recommendations);
+    } catch (error) {
+        logger.error('Recommendations error:', error);
+        res.status(500).json({ message: 'Recommendations error' });
+    }
+};
+
 module.exports = { 
     raiseComplaint, 
     getMyComplaints, 
@@ -409,5 +721,17 @@ module.exports = {
     getAITag,
     getStats,
     getAssignedComplaints,
-    enhanceDescription
+    enhanceDescription,
+    getTimeline,
+    summarizeComplaint,
+    getSimilarComplaints,
+    checkDuplicateComplaint,
+    generateQR,
+    searchKnowledgeBase,
+    getAutoFAQ,
+    getDepartmentPerformance,
+    getHeatmapData,
+    getTrends,
+    getHostelTracking,
+    getRecommendations
 };

@@ -52,6 +52,7 @@ app.use('/api/complaints', require('./routes/complaintRoutes'));
 app.use('/api/feedback', require('./routes/feedbackRoutes'));
 app.use('/api/messages', require('./routes/messageRoutes'));
 app.use('/api/health', require('./routes/healthRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes'));
 
 // Error Handling Middleware
 app.use((err, req, res, next) => {

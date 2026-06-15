@@ -26,10 +26,25 @@
                 </div>
             </div>
             <div class="user-controls" id="userControls">
+                <select id="languageSelect" onchange="changeLanguage(this.value)" class="form-control" style="max-width: 100px; margin-right: 0.5rem; display: inline-block; padding: 0.3rem; height: 35px; border-radius: 8px;">
+                    <option value="en">English</option>
+                    <option value="hi">हिंदी</option>
+                </select>
                 <span id="welcomeText" class="welcome-text"></span>
                 <button id="themeToggle" class="btn btn-outline" style="margin-right: 0.5rem;"><i class="fa-solid fa-moon"></i></button>
+                <div class="notif-wrapper" style="position:relative;display:inline-block;margin-right:0.5rem;">
+                    <button class="btn btn-outline" onclick="toggleNotifPanel()"><i class="fa-solid fa-bell"></i></button>
+                    <span id="notifBadge" class="notif-badge" style="display:none;"></span>
+                    <div id="notifPanel" class="notif-panel glass-panel">
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem;border-bottom:1px solid var(--border);">
+                            <strong>Notifications</strong>
+                            <button class="btn btn-sm btn-outline" onclick="markAllNotifRead()">Mark all read</button>
+                        </div>
+                        <div id="notifList" style="max-height:300px;overflow-y:auto;"></div>
+                    </div>
+                </div>
                 <button id="deleteAccountBtn" class="btn btn-outline" style="margin-right: 0.5rem; color: #ef4444; border-color: #ef4444;" onclick="deleteAccount()" title="Delete Account"><i class="fa-solid fa-trash-can"></i></button>
-                <button id="logoutBtn" class="btn btn-outline"><i class="fa-solid fa-sign-out-alt"></i> Logout</button>
+                <button id="logoutBtn" class="btn btn-outline" data-i18n="nav.logout"><i class="fa-solid fa-sign-out-alt"></i> Logout</button>
             </div>
         </div>
     </header>
@@ -39,7 +54,7 @@
         <section class="view active">
             <!-- User Profile Card -->
             <div class="profile-card" id="profileCard">
-                <div class="avatar-container" style="position: relative; cursor: pointer;" onclick="document.getElementById('profilePhotoInput').click()">
+                <div class="avatar-container" style="position: relative; cursor: pointer;" onclick="openProfilePhotoModal()">
                     <img src="https://via.placeholder.com/100" alt="Profile" class="profile-avatar" id="profileImg">
                     <div class="avatar-overlay" style="position: absolute; bottom: 0; right: 0; background: var(--primary); color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem;">
                         <i class="fa-solid fa-camera"></i>
@@ -59,7 +74,7 @@
 
             <div class="dashboard-header">
                 <h2>Student Dashboard</h2>
-                <button id="openComplaintModalBtn" class="btn btn-primary"><i class="fa-solid fa-plus"></i> New Complaint</button>
+                <button id="openComplaintModalBtn" class="btn btn-primary" data-i18n="btn.new_complaint"><i class="fa-solid fa-plus"></i> New Complaint</button>
             </div>
             <div class="dashboard-content glass-panel">
                 <div class="filter-bar" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; align-items: center;">
@@ -70,9 +85,9 @@
                         <option value="In Progress">In Progress</option>
                         <option value="Resolved">Resolved</option>
                     </select>
-                    <button class="btn btn-primary" onclick="applyFilters()">Filter</button>
+                    <button class="btn btn-primary" onclick="applyFilters()" data-i18n="btn.filter">Filter</button>
                     <button class="btn btn-outline" onclick="loadUserComplaints()"><i class="fa-solid fa-sync"></i> Refresh List</button>
-                    <button class="btn btn-outline" onclick="exportToCSV()" style="margin-left: 0.5rem;"><i class="fa-solid fa-file-csv"></i> Export</button>
+                    <button class="btn btn-outline" onclick="exportToCSV()" style="margin-left: 0.5rem;" data-i18n="btn.export"><i class="fa-solid fa-file-csv"></i> Export</button>
                 </div>
                 <div class="table-container">
                     <h3>My Complaints</h3>
@@ -106,8 +121,9 @@
                 <form id="complaintForm" class="horizontal-form">
                     <div class="horizontal-group">
                         <label>Title</label>
-                        <input type="text" id="compTitle" required placeholder="Brief description of the issue">
+                        <input type="text" id="compTitle" required placeholder="Brief description of the issue" onblur="checkForDuplicates()">
                     </div>
+                    <div id="duplicateWarning" class="alert-warning" style="display:none;padding:0.6rem;border-radius:8px;background:#fef3c7;color:#92400e;font-size:0.85rem;margin-bottom:0.5rem;"></div>
                     <div class="horizontal-group">
                         <label>Category</label>
                         <div style="display: flex; gap: 0.5rem; flex: 1;">
@@ -165,17 +181,34 @@
                         <div id="cameraSection" class="camera-container">
                             <video id="cameraStream" autoplay playsinline muted></video>
                             <div class="camera-controls">
-                                <button type="button" id="startCamera" class="btn btn-outline btn-sm">
-                                    <i class="fa-solid fa-power-off"></i> Start Camera
-                                </button>
-                                <button type="button" id="capturePhoto" class="btn btn-primary btn-sm" style="display:none;">
-                                    <i class="fa-solid fa-camera"></i> Take Photo
-                                </button>
-                            </div>
+                            <button type="button" id="startCamera" class="btn btn-outline btn-sm" onclick="startCamera()">
+                                <i class="fa-solid fa-power-off"></i> Start Camera
+                            </button>
+                            <button type="button" id="switchCamera" class="btn btn-outline btn-sm" style="display:none;" onclick="toggleCamera()">
+                                <i class="fa-solid fa-camera-rotate"></i> Switch
+                            </button>
+                            <button type="button" id="capturePhoto" class="btn btn-primary btn-sm" style="display:none;" onclick="capturePhoto()">
+                                <i class="fa-solid fa-camera"></i> Photo
+                            </button>
+                            <button type="button" id="startVideoBtn" class="btn btn-danger btn-sm" style="display:none;" onclick="startComplaintVideoRecording()">
+                                <i class="fa-solid fa-video"></i> Record
+                            </button>
+                            <button type="button" id="stopVideoBtn" class="btn btn-danger btn-sm" style="display:none;" onclick="stopComplaintVideoRecording()">
+                                <i class="fa-solid fa-stop"></i> Stop
+                            </button>
+                        </div>
                             <canvas id="photoCanvas" style="display:none;"></canvas>
                         </div>
 
                         <div id="filePreview" class="file-preview"></div>
+                    </div>
+                    <div class="horizontal-group" style="align-items:center;">
+                        <label style="flex:0 0 auto;margin-bottom:0;"><i class="fa-solid fa-user-secret"></i> Anonymous</label>
+                        <label class="switch" style="flex:0;">
+                            <input type="checkbox" id="compAnonymous">
+                            <span class="slider round"></span>
+                        </label>
+                        <small style="color:#94a3b8;margin-left:0.5rem;">Your identity will be hidden from staff</small>
                     </div>
                     <button type="submit" class="btn btn-primary btn-block">Submit Complaint</button>
                 </form>
@@ -185,7 +218,7 @@
 
     <!-- VIEW COMPLAINT MODAL -->
     <div id="viewComplaintModal" class="modal-overlay">
-        <div class="modal-content glass-panel" style="max-width: 800px;">
+        <div class="modal-content glass-panel" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header">
                 <h3 id="viewCompTitle">Complaint Details</h3>
                 <button class="close-modal"><i class="fa-solid fa-times"></i></button>
@@ -202,32 +235,19 @@
                     </div>
                     <div class="detail-item">
                         <label>Location</label>
-                        <div id="viewFeedbackSection" class="detail-section" style="display: none;">
-                    <h3>Your Feedback</h3>
-                    <div class="feedback-display">
-                        <p id="viewCompRating" class="rating-stars"></p>
-                        <p id="viewCompFeedbackMsg"></p>
+                        <p id="viewCompLocation"></p>
                     </div>
-                </div>
+                    <div class="detail-item">
+                        <label>Room</label>
+                        <p id="viewCompRoom"></p>
+                    </div>
 
-                <!-- CHAT SECTION -->
-                <div id="chatSection" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
-                    <h4 style="margin-bottom: 1rem;"><i class="fa-solid fa-comments"></i> Discussion</h4>
-                    <div id="messageList" style="max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.05); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
-                        <!-- Messages -->
-                    </div>
-                    <div style="display: flex; gap: 0.5rem;">
-                        <input type="text" id="chatInput" placeholder="Type a message..." class="form-control">
-                        <button class="btn btn-primary btn-sm" onclick="sendChatMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+                    <div class="detail-item">
+                        <label>Deadline</label>
+                        <p id="viewCompDeadline"></p>
                     </div>
                 </div>
-
-                <!-- MAP SECTION -->
-                <div id="mapSection" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
-                    <h4 style="margin-bottom: 1rem;"><i class="fa-solid fa-location-dot"></i> Location</h4>
-                    <div id="complaintMap" style="height: 200px; border-radius: 8px; background: #eee;"></div>
-                </div>
-            </div>    <div class="detail-section">
+                <div class="detail-section">
                     <label>Description</label>
                     <p id="viewCompDesc" class="description-box"></p>
                 </div>
@@ -247,6 +267,36 @@
                         <p id="viewCompFeedbackMsg" class="description-box" style="background: rgba(37, 99, 235, 0.03);"></p>
                     </div>
                 </div>
+                
+                <div id="aiSummary" class="detail-section ai-summary-box" style="display:none;padding:0.75rem;background:linear-gradient(135deg,rgba(168,85,247,0.05),rgba(59,130,246,0.05));border-radius:8px;margin-top:0.5rem;"></div>
+                
+                <div class="detail-section" style="margin-top:1rem;">
+                    <label><i class="fa-solid fa-timeline"></i> Complaint Timeline</label>
+                    <div id="timelineContainer" class="timeline-wrapper"></div>
+                </div>
+                
+                <div class="detail-section" style="margin-top:1rem;">
+                    <label><i class="fa-solid fa-layer-group"></i> Similar Complaints</label>
+                    <div id="similarComplaints"></div>
+                </div>
+                
+                <!-- CHAT SECTION -->
+                <div id="chatSection" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                    <h4 style="margin-bottom: 1rem;"><i class="fa-solid fa-comments"></i> Discussion</h4>
+                    <div id="messageList" style="max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.05); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                        <!-- Messages -->
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="text" id="chatInput" placeholder="Type a message..." class="form-control">
+                        <button class="btn btn-primary btn-sm" onclick="sendChatMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+                    </div>
+                </div>
+
+                <!-- MAP SECTION -->
+                <div id="mapSection" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                    <h4 style="margin-bottom: 1rem;"><i class="fa-solid fa-location-dot"></i> Location Map</h4>
+                    <div id="complaintMap" style="height: 200px; border-radius: 8px; background: #eee; position: relative; z-index: 1;"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -262,8 +312,19 @@
                 <form id="feedbackForm">
                     <input type="hidden" id="feedbackComplaintId">
                     <div class="input-group">
-                        <label>Rating (1 to 5)</label>
-                        <input type="number" id="feedRating" min="1" max="5" required placeholder="5">
+                        <label>Rating</label>
+                        <div class="star-rating-input">
+                            <input type="radio" id="star5" name="feedRating" value="5" required>
+                            <label for="star5" title="5 stars"><i class="fa-solid fa-star"></i></label>
+                            <input type="radio" id="star4" name="feedRating" value="4">
+                            <label for="star4" title="4 stars"><i class="fa-solid fa-star"></i></label>
+                            <input type="radio" id="star3" name="feedRating" value="3">
+                            <label for="star3" title="3 stars"><i class="fa-solid fa-star"></i></label>
+                            <input type="radio" id="star2" name="feedRating" value="2">
+                            <label for="star2" title="2 stars"><i class="fa-solid fa-star"></i></label>
+                            <input type="radio" id="star1" name="feedRating" value="1">
+                            <label for="star1" title="1 star"><i class="fa-solid fa-star"></i></label>
+                        </div>
                     </div>
                     <div class="input-group">
                         <label>Comments</label>
@@ -303,12 +364,55 @@
         </div>
     </div>
 
+    <!-- PROFILE PHOTO MODAL -->
+    <div id="profilePhotoModal" class="modal-overlay">
+        <div class="modal-content glass-panel" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>Update Profile Photo</h3>
+                <button class="close-modal" onclick="closeProfilePhotoModal()"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="input-group">
+                    <div class="media-source-toggle" style="margin-bottom: 1rem;">
+                        <button type="button" class="source-btn active" id="profSourceUpload" onclick="switchProfileMediaSource('upload')">
+                            <i class="fa-solid fa-file-arrow-up"></i> From Device
+                        </button>
+                        <button type="button" class="source-btn" id="profSourceCapture" onclick="switchProfileMediaSource('capture')">
+                            <i class="fa-solid fa-camera"></i> Real-time Capture
+                        </button>
+                    </div>
+
+                    <div id="profUploadSection">
+                        <input type="file" id="profilePhotoInput" accept="image/*" class="form-control" onchange="handleProfileFileUpload(this)">
+                    </div>
+
+                    <div id="profCameraSection" class="camera-container" style="display: none;">
+                        <video id="profCameraStream" autoplay playsinline muted></video>
+                        <div class="camera-controls">
+                            <button type="button" id="profStartCamera" class="btn btn-outline btn-sm" onclick="startProfileCamera()">
+                                <i class="fa-solid fa-power-off"></i> Start Camera
+                            </button>
+                            <button type="button" id="profSwitchCamera" class="btn btn-outline btn-sm" style="display:none;" onclick="toggleProfileCamera()">
+                                <i class="fa-solid fa-camera-rotate"></i> Switch
+                            </button>
+                            <button type="button" id="profCapturePhoto" class="btn btn-primary btn-sm" style="display:none;" onclick="captureProfilePhoto()">
+                                <i class="fa-solid fa-camera"></i> Take Photo
+                            </button>
+                        </div>
+                        <canvas id="profPhotoCanvas" style="display:none;"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="toast" class="toast">
         <i class="fa-solid fa-check-circle"></i>
         <span id="toastMsg">Success</span>
     </div>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script src="js/dashboard.js"></script>
+    <script src="js/i18n.js"></script>
+    <script src="js/dashboard.js?v=2"></script>
 </body>
 </html>

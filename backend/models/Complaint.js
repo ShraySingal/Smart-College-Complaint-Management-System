@@ -59,6 +59,42 @@ const Complaint = sequelize.define('Complaint', {
     deadline: {
         type: DataTypes.DATE,
         allowNull: true,
+    },
+    sentimentScore: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+    },
+    sentimentLabel: {
+        type: DataTypes.ENUM('Positive', 'Neutral', 'Negative', 'Urgent'),
+        allowNull: true,
+    },
+    priorityScore: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+    },
+    escalationLevel: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+    },
+    escalatedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+    },
+    isAnonymous: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+    },
+    qualityScore: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+    },
+    latitude: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+    },
+    longitude: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
     }
 }, {
     timestamps: true,

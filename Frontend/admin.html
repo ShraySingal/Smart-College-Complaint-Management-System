@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -21,10 +22,25 @@
                 </div>
             </div>
             <div class="user-controls">
+                <select id="languageSelect" onchange="changeLanguage(this.value)" class="form-control" style="max-width: 100px; margin-right: 0.5rem; display: inline-block; padding: 0.3rem; height: 35px; border-radius: 8px;">
+                    <option value="en">English</option>
+                    <option value="hi">हिंदी</option>
+                </select>
                 <span id="welcomeText" class="welcome-text"></span>
                 <button id="themeToggle" class="btn btn-outline" style="margin-right: 0.5rem;"><i class="fa-solid fa-moon"></i></button>
+                <div class="notif-wrapper" style="position:relative;display:inline-block;margin-right:0.5rem;">
+                    <button class="btn btn-outline" onclick="toggleNotifPanel()"><i class="fa-solid fa-bell"></i></button>
+                    <span id="notifBadge" class="notif-badge" style="display:none;"></span>
+                    <div id="notifPanel" class="notif-panel glass-panel">
+                        <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem;border-bottom:1px solid var(--border);">
+                            <strong>Notifications</strong>
+                            <button class="btn btn-sm btn-outline" onclick="markAllNotifRead()">Mark all read</button>
+                        </div>
+                        <div id="notifList" style="max-height:300px;overflow-y:auto;"></div>
+                    </div>
+                </div>
                 <button id="deleteAccountBtn" class="btn btn-outline" style="margin-right: 0.5rem; color: #ef4444; border-color: #ef4444;" onclick="deleteAccount()" title="Delete Account"><i class="fa-solid fa-trash-can"></i></button>
-                <button id="logoutBtn" class="btn btn-outline"><i class="fa-solid fa-sign-out-alt"></i> Logout</button>
+                <button id="logoutBtn" class="btn btn-outline" data-i18n="nav.logout"><i class="fa-solid fa-sign-out-alt"></i> Logout</button>
             </div>
         </div>
     </header>
@@ -32,10 +48,14 @@
     <main class="app-container">
         <!-- Sidebar Tabs -->
         <aside class="sidebar glass-panel">
-            <button class="nav-btn active" onclick="switchTab('complaints')"><i class="fa-solid fa-clipboard-list"></i> Complaints</button>
-            <button class="nav-btn" onclick="switchTab('users')"><i class="fa-solid fa-users"></i> User Management</button>
-            <button class="nav-btn" onclick="switchTab('analytics')"><i class="fa-solid fa-chart-line"></i> Analytics</button>
-            <button class="nav-btn" onclick="switchTab('logs')"><i class="fa-solid fa-file-contract"></i> System Logs</button>
+            <button class="nav-btn active" onclick="switchTab('complaints')" data-i18n="tab.complaints"><i class="fa-solid fa-clipboard-list"></i> Complaints</button>
+            <button class="nav-btn" onclick="switchTab('users')" data-i18n="tab.users"><i class="fa-solid fa-users"></i> User Management</button>
+            <button class="nav-btn" onclick="switchTab('analytics')" data-i18n="tab.analytics"><i class="fa-solid fa-chart-line"></i> Analytics</button>
+            <button class="nav-btn" onclick="switchTab('aiInsights')"><i class="fa-solid fa-robot"></i> AI Insights</button>
+            <button class="nav-btn" onclick="switchTab('rankings')"><i class="fa-solid fa-ranking-star"></i> Rankings</button>
+            <button class="nav-btn" onclick="switchTab('hostelTracker')"><i class="fa-solid fa-building"></i> Hostel Tracker</button>
+            <button class="nav-btn" onclick="switchTab('qrGenerator')"><i class="fa-solid fa-qrcode"></i> QR Codes</button>
+            <button class="nav-btn" onclick="switchTab('logs')" data-i18n="tab.logs"><i class="fa-solid fa-file-contract"></i> System Logs</button>
         </aside>
 
         <!-- Main Content -->
@@ -121,20 +141,111 @@
                 <div class="stats-grid">
                     <div class="glass-panel stat-box">
                         <h4 id="totalStats">0</h4>
-                        <p>Total Complaints</p>
+                        <p data-i18n="stats.total">Total Complaints</p>
                     </div>
                     <div class="glass-panel stat-box">
                         <h4 id="pendingStats" style="color: var(--warning);">0</h4>
-                        <p>Pending</p>
+                        <p data-i18n="stats.pending">Pending</p>
                     </div>
                     <div class="glass-panel stat-box">
                         <h4 id="resolvedStats" style="color: var(--success);">0</h4>
-                        <p>Resolved</p>
+                        <p data-i18n="stats.resolved">Resolved</p>
                     </div>
                     <div class="glass-panel stat-box">
                         <h4 id="overdueStats" style="color: var(--danger);">0</h4>
-                        <p>Overdue</p>
+                        <p data-i18n="stats.overdue">Overdue</p>
                     </div>
+                </div>
+                
+                <div class="charts-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem;">
+                    <div class="glass-panel" style="padding: 1.5rem;">
+                        <h3 style="margin-bottom: 1rem; text-align: center;">Complaints by Status</h3>
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                    <div class="glass-panel" style="padding: 1.5rem;">
+                        <h3 style="margin-bottom: 1rem; text-align: center;">Complaints by Category</h3>
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB: AI INSIGHTS -->
+            <div id="aiInsightsTab" class="tab-content" style="display:none;">
+                <h2><i class="fa-solid fa-robot"></i> AI Insights & Recommendations</h2>
+                <div class="analytics-grid">
+                    <div class="analytics-card">
+                        <h4><i class="fa-solid fa-lightbulb" style="color:#f59e0b;"></i> Preventive Maintenance Recommendations</h4>
+                        <div id="recommendationsList">Loading...</div>
+                    </div>
+                </div>
+                <div class="analytics-card" style="margin-top:1rem;">
+                    <h4><i class="fa-solid fa-book"></i> Knowledge Base</h4>
+                    <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;flex-wrap:wrap;">
+                        <input type="text" id="kbSearch" placeholder="Search resolved complaints..." class="form-control" style="flex:1;min-width:200px;">
+                        <select id="kbCategory" class="form-control" style="max-width:150px;">
+                            <option value="">All Categories</option>
+                            <option value="Electricity">Electricity</option>
+                            <option value="Water">Water</option>
+                            <option value="Internet">Internet</option>
+                            <option value="Furniture">Furniture</option>
+                            <option value="Hygiene">Hygiene</option>
+                            <option value="Other">Other</option>
+                        </select>
+                        <button class="btn btn-primary btn-sm" onclick="searchKnowledgeBase()"><i class="fa-solid fa-search"></i> Search</button>
+                    </div>
+                    <div id="kbResults"></div>
+                    <h4 style="margin-top:1.5rem;"><i class="fa-solid fa-question-circle"></i> Auto-Generated FAQ</h4>
+                    <div id="faqContainer">Loading...</div>
+                </div>
+            </div>
+
+            <!-- TAB: RANKINGS -->
+            <div id="rankingsTab" class="tab-content" style="display:none;">
+                <h2><i class="fa-solid fa-ranking-star"></i> Department Performance Rankings</h2>
+                <div class="glass-panel" style="overflow-x:auto;padding:0;">
+                    <table class="performance-table">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Department</th>
+                                <th>Total</th>
+                                <th>Resolved</th>
+                                <th>Rate</th>
+                                <th>Avg. Time</th>
+                                <th>Score</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deptPerformanceTable">Loading...</tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB: HOSTEL TRACKER -->
+            <div id="hostelTrackerTab" class="tab-content" style="display:none;">
+                <h2><i class="fa-solid fa-building"></i> Hostel Room Complaint Tracker</h2>
+                <p style="color:var(--text-muted);margin-bottom:1rem;">Color-coded room cards showing complaint density. Red = high priority.</p>
+                <div id="hostelGrid">Loading...</div>
+            </div>
+
+            <!-- TAB: QR GENERATOR -->
+            <div id="qrGeneratorTab" class="tab-content" style="display:none;">
+                <h2><i class="fa-solid fa-qrcode"></i> QR Code Generator</h2>
+                <p style="color:var(--text-muted);margin-bottom:1rem;">Generate QR codes for specific locations. Students can scan to auto-fill complaint forms.</p>
+                <div class="glass-panel" style="padding:1.5rem;max-width:500px;">
+                    <div style="margin-bottom:1rem;">
+                        <label>Location</label>
+                        <select id="qrLocation" class="form-control">
+                            <option value="">Select Location</option>
+                            <option value="Hostel">Hostel</option>
+                            <option value="Academic Block">Academic Block</option>
+                        </select>
+                    </div>
+                    <div style="margin-bottom:1rem;">
+                        <label>Room / Area</label>
+                        <input type="text" id="qrRoom" class="form-control" placeholder="e.g., B-302, Lab-4">
+                    </div>
+                    <button class="btn btn-primary" onclick="generateQRCode()"><i class="fa-solid fa-qrcode"></i> Generate QR Code</button>
+                    <div id="qrPreview" style="margin-top:1.5rem;text-align:center;"></div>
                 </div>
             </div>
 
@@ -149,15 +260,75 @@
         </section>
     </main>
 
-    <!-- MODALS -->
+    <!-- VIEW COMPLAINT MODAL -->
     <div id="viewComplaintModal" class="modal-overlay">
-        <div class="modal-content glass-panel" style="max-width: 800px;">
+        <div class="modal-content glass-panel" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header">
                 <h3 id="viewCompTitle">Complaint Details</h3>
                 <button class="close-modal"><i class="fa-solid fa-times"></i></button>
             </div>
             <div class="modal-body">
-                <!-- Content handled by JS -->
+                <div class="details-grid">
+                    <div class="detail-item">
+                        <label>Category</label>
+                        <p id="viewCompCategory"></p>
+                    </div>
+                    <div class="detail-item">
+                        <label>Status</label>
+                        <p id="viewCompStatus"></p>
+                    </div>
+                    <div class="detail-item">
+                        <label>Location</label>
+                        <p id="viewCompLocation"></p>
+                    </div>
+                    <div class="detail-item">
+                        <label>Room</label>
+                        <p id="viewCompRoom"></p>
+                    </div>
+
+                    <div class="detail-item">
+                        <label>Deadline</label>
+                        <p id="viewCompDeadline"></p>
+                    </div>
+                </div>
+                <div class="detail-section">
+                    <label>Description</label>
+                    <p id="viewCompDesc" class="description-box"></p>
+                </div>
+                <div class="detail-section">
+                    <label>Attachment</label>
+                    <div id="viewCompAttachment" class="attachment-preview"></div>
+                </div>
+                <div id="viewResolutionSection" class="detail-section" style="display:none;">
+                    <label>Resolution Summary</label>
+                    <p id="viewCompResolution" class="resolution-box"></p>
+                </div>
+                <div id="viewFeedbackSection" class="detail-section" style="display:none;">
+                    <hr style="border: 0; border-top: 1px solid var(--border); margin: 2rem 0 1rem;">
+                    <label>User Feedback</label>
+                    <div class="feedback-display">
+                        <div class="rating-stars" id="viewCompRating"></div>
+                        <p id="viewCompFeedbackMsg" class="description-box" style="background: rgba(37, 99, 235, 0.03);"></p>
+                    </div>
+                </div>
+                
+                <!-- CHAT SECTION -->
+                <div id="chatSection" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                    <h4 style="margin-bottom: 1rem;"><i class="fa-solid fa-comments"></i> Discussion</h4>
+                    <div id="messageList" style="max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.05); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                        <!-- Messages -->
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="text" id="chatInput" placeholder="Type a message..." class="form-control">
+                        <button class="btn btn-primary btn-sm" onclick="sendChatMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+                    </div>
+                </div>
+
+                <!-- MAP SECTION -->
+                <div id="mapSection" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border);">
+                    <h4 style="margin-bottom: 1rem;"><i class="fa-solid fa-location-dot"></i> Location Map</h4>
+                    <div id="complaintMap" style="height: 200px; border-radius: 8px; background: #eee; position: relative; z-index: 1;"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -177,8 +348,42 @@
                         <textarea id="resSummary" rows="3" required placeholder="What was done to solve this?" class="form-control"></textarea>
                     </div>
                     <div class="input-group" style="margin-bottom: 1.5rem;">
-                        <label><i class="fa-solid fa-camera"></i> Proof of Resolution (Image/Video)</label>
-                        <input type="file" id="resAttachment" accept="image/*,video/*" class="form-control">
+                        <label><i class="fa-solid fa-camera"></i> Proof of Resolution</label>
+                        <div class="media-source-toggle" style="margin-bottom: 1rem;">
+                            <button type="button" class="source-btn active" id="resSourceUpload" onclick="switchResolveMediaSource('upload')">
+                                <i class="fa-solid fa-file-arrow-up"></i> From Device
+                            </button>
+                            <button type="button" class="source-btn" id="resSourceCapture" onclick="switchResolveMediaSource('capture')">
+                                <i class="fa-solid fa-video"></i> Real-time Capture
+                            </button>
+                        </div>
+                        
+                        <div id="resUploadSection">
+                            <input type="file" id="resAttachment" accept="image/*,video/*" class="form-control">
+                        </div>
+
+                        <div id="resCameraSection" class="camera-container" style="display: none;">
+                            <video id="resCameraStream" autoplay playsinline muted></video>
+                            <div class="camera-controls">
+                                <button type="button" id="resStartCamera" class="btn btn-outline btn-sm" onclick="startResolveCamera()">
+                                    <i class="fa-solid fa-power-off"></i> Start Camera
+                                </button>
+                                <button type="button" id="resSwitchCamera" class="btn btn-outline btn-sm" style="display:none;" onclick="toggleResolveCamera()">
+                                    <i class="fa-solid fa-camera-rotate"></i> Switch
+                                </button>
+                                <button type="button" id="resCapturePhoto" class="btn btn-primary btn-sm" style="display:none;" onclick="captureResolvePhoto()">
+                                    <i class="fa-solid fa-camera"></i> Photo
+                                </button>
+                                <button type="button" id="resStartVideo" class="btn btn-danger btn-sm" style="display:none;" onclick="startResolveVideoRecording()">
+                                    <i class="fa-solid fa-video"></i> Record
+                                </button>
+                                <button type="button" id="resStopVideo" class="btn btn-danger btn-sm" style="display:none;" onclick="stopResolveVideoRecording()">
+                                    <i class="fa-solid fa-stop"></i> Stop
+                                </button>
+                            </div>
+                            <canvas id="resPhotoCanvas" style="display:none;"></canvas>
+                        </div>
+                        <div id="resFilePreview" style="margin-top: 1rem; text-align: center;"></div>
                     </div>
                     <button type="submit" class="btn btn-primary w-100">Submit Resolution</button>
                 </form>
@@ -242,6 +447,7 @@
     </div>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <script src="js/dashboard.js"></script>
+    <script src="js/i18n.js"></script>
+    <script src="js/dashboard.js?v=2"></script>
 </body>
 </html>
